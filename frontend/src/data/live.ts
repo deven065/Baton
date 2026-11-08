@@ -12,6 +12,7 @@ export type SourceTypeDto = 'GITHUB' | 'TASK_CSV' | 'DOCUMENT' | 'MEETING_NOTES'
 
 export interface UserDto {
   id: string; email: string; displayName: string; orgRole: 'ADMIN' | 'MEMBER'; clearance: SensitivityDto; groups: string[];
+  mustChangePassword: boolean;
   /** The company workspace this session belongs to (each has its own database). */
   workspace: { slug: string; name: string };
 }
@@ -200,5 +201,97 @@ export function useSyncSource(projectId?: string | null) {
   return useMutation({
     mutationFn: (id: string) => api<unknown>(`/api/sources/${id}/sync`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.sources(projectId ?? '') }),
+  });
+}
+
+// ───────────── phase 2: company administration ─────────────
+export interface AdminUserDto {
+  id: string; email: string; displayName: string; orgRole: 'ADMIN' | 'MEMBER'; clearance: SensitivityDto;
+  groups: string[]; active: boolean; mustChangePassword: boolean; createdAt: string;
+}
+export interface GroupDto { id: string; name: string; description: string | null; members: number }
+export interface AuditRowDto {
+  id: number; at: string; actorId: string | null; actorName: string | null; action: string; entityType: string | null;
+  entityId: string | null; projectId: string | null; details: string;
+}
+export interface AdminProjectDto { id: string; name: string; description: string | null; leads: string[]; members: number; handovers: number; createdAt: string }
+export interface TeamMemberDto { userId: string; displayName: string; email: string; role: 'PROJECT_LEAD' | 'MEMBER'; joinedAt: string }
+export interface PersonDto { id: string; displayName: string; email: string }
+
+export const qa = {
+  users: ['admin', 'users'] as const,
+  groups: ['admin', 'groups'] as const,
+  audit: (action: string) => ['admin', 'audit', action] as const,
+  projects: ['admin', 'projects'] as const,
+  team: (p: string) => ['team', p] as const,
+  directory: ['directory'] as const,
+};
+
+export const useAdminUsers = () => useQuery({ queryKey: qa.users, queryFn: () => api<AdminUserDto[]>('/api/admin/users') });
+export const useGroups = () => useQuery({ queryKey: qa.groups, queryFn: () => api<GroupDto[]>('/api/admin/groups') });
+export const useAudit = (action = '') => useQuery({
+  queryKey: qa.audit(action),
+  queryFn: () => api<AuditRowDto[]>(`/api/admin/audit?limit=200${action ? `&action=${encodeURIComponent(action)}` : ''}`),
+});
+export const useAdminProjects = () => useQuery({ queryKey: qa.projects, queryFn: () => api<AdminProjectDto[]>('/api/admin/projects') });
+export const useTeam = (projectId?: string | null) => useQuery({ queryKey: qa.team(projectId ?? ''), queryFn: () => api<TeamMemberDto[]>(`/api/projects/${projectId}/team`), enabled: !!projectId });
+export const useDirectory = (enabled = true) => useQuery({ queryKey: qa.directory, queryFn: () => api<PersonDto[]>('/api/directory'), enabled });
+
+function useInvalidate(...keys: readonly (readonly unknown[])[]) {
+  const qc = useQueryClient();
+  return () => keys.forEach(k => qc.invalidateQueries({ queryKey: k as unknown[] }));
+}
+
+export function useCreateUser() {
+  const inv = useInvalidate(qa.users, ['admin', 'audit'], qa.directory);
+  return useMutation({
+    mutationFn: (p: { displayName: string; email: string; orgRole: 'ADMIN' | 'MEMBER'; clearance: SensitivityDto; groups: string[] }) =>
+      api<{ user: AdminUserDto; temporaryPassword: string }>('/api/admin/users', { method: 'POST', json: p }),
+    onSuccess: inv,
+  });
+}
+export function useUpdateUser() {
+  const inv = useInvalidate(qa.users, qa.groups, ['admin', 'audit'], qa.directory);
+  return useMutation({
+    mutationFn: ({ id, ...p }: { id: string; displayName?: string; orgRole?: 'ADMIN' | 'MEMBER'; clearance?: SensitivityDto; groups?: string[]; active?: boolean }) =>
+      api<AdminUserDto>(`/api/admin/users/${id}`, { method: 'PATCH', json: p }),
+    onSuccess: inv,
+  });
+}
+export function useResetPassword() {
+  const inv = useInvalidate(qa.users, ['admin', 'audit']);
+  return useMutation({
+    mutationFn: (id: string) => api<{ temporaryPassword: string }>(`/api/admin/users/${id}/reset-password`, { method: 'POST' }),
+    onSuccess: inv,
+  });
+}
+export function useCreateGroup() {
+  const inv = useInvalidate(qa.groups, ['admin', 'audit']);
+  return useMutation({ mutationFn: (p: { name: string; description?: string }) => api<GroupDto>('/api/admin/groups', { method: 'POST', json: p }), onSuccess: inv });
+}
+export function useDeleteGroup() {
+  const inv = useInvalidate(qa.groups, ['admin', 'audit']);
+  return useMutation({ mutationFn: (id: string) => api<void>(`/api/admin/groups/${id}`, { method: 'DELETE' }), onSuccess: inv });
+}
+export function useCreateProject() {
+  const inv = useInvalidate(qa.projects, ['admin', 'audit'], qk.projects);
+  return useMutation({
+    mutationFn: (p: { name: string; description?: string; leadUserId: string }) => api<{ id: string; name: string }>('/api/projects', { method: 'POST', json: p }),
+    onSuccess: inv,
+  });
+}
+export function useTeamMutations(projectId?: string | null) {
+  const inv = useInvalidate(qa.team(projectId ?? ''), qa.projects, ['admin', 'audit'], ['project']);
+  const add = useMutation({ mutationFn: (p: { userId: string; role: 'PROJECT_LEAD' | 'MEMBER' }) => api<void>(`/api/projects/${projectId}/members`, { method: 'POST', json: p }), onSuccess: inv });
+  const role = useMutation({ mutationFn: (p: { userId: string; role: 'PROJECT_LEAD' | 'MEMBER' }) => api<void>(`/api/projects/${projectId}/members/${p.userId}`, { method: 'PATCH', json: { role: p.role } }), onSuccess: inv });
+  const remove = useMutation({ mutationFn: (userId: string) => api<void>(`/api/projects/${projectId}/members/${userId}`, { method: 'DELETE' }), onSuccess: inv });
+  return { add, role, remove };
+}
+export function useCreateHandover(projectId?: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (p: { departingUserId: string; title: string; scenario: 'PLANNED' | 'SUDDEN' | 'SPLIT' }) =>
+      api<HandoverDto>(`/api/projects/${projectId}/handovers`, { method: 'POST', json: p }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['handovers'] }),
   });
 }

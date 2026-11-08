@@ -11,13 +11,13 @@ import com.bramhastra.baton.identity.UserGroup;
 
 /** The authenticated caller, loaded fresh from the database on every request. */
 public record CurrentUser(UUID id, String email, String displayName, OrgRole orgRole,
-                          Sensitivity clearance, Set<String> groups) {
+                          Sensitivity clearance, Set<String> groups, boolean mustChangePassword) {
 
     public static CurrentUser of(AppUser u) {
         Set<String> groups = u.getGroups().stream().map(UserGroup::getName)
                 .collect(Collectors.toUnmodifiableSet());
         return new CurrentUser(u.getId(), u.getEmail(), u.getDisplayName(), u.getOrgRole(),
-                u.getClearance(), groups);
+                u.getClearance(), groups, u.isMustChangePassword());
     }
 
     public boolean isAdmin() {

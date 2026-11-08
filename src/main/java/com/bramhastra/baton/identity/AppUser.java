@@ -47,6 +47,9 @@ public class AppUser {
 
     private boolean active = true;
 
+    /** Set when an admin creates the account or resets its password; cleared when the user picks their own. */
+    private boolean mustChangePassword;
+
     private Instant createdAt = Instant.now();
 
     @ManyToMany(fetch = FetchType.EAGER)

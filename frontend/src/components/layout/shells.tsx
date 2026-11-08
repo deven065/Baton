@@ -1,5 +1,5 @@
 import {
-  AlertTriangle, Bell, CheckSquare, ChevronDown, ChevronRight, Clock, Eye, FileText, Home, Layers, LogOut, Menu, Plug, Search, Share2, ShieldCheck, Users, X,
+  AlertTriangle, FolderKanban, UsersRound, Bell, CheckSquare, ChevronDown, ChevronRight, Clock, Eye, FileText, Home, Layers, LogOut, Menu, Plug, Search, Share2, ShieldCheck, Users, X,
   type LucideIcon,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -23,14 +23,17 @@ const NAV_MAIN: Nav[] = [
   { to: '/app/share', label: 'Share', icon: Share2, demo: true },
 ];
 const NAV_ADMIN: Nav[] = [
-  { to: '/app/admin/users', label: 'Users & groups', icon: Users, demo: true },
-  { to: '/app/admin/audit', label: 'Audit log', icon: FileText, demo: true },
+  { to: '/app/admin/users', label: 'People & groups', icon: Users },
+  { to: '/app/admin/projects', label: 'Projects', icon: FolderKanban },
+  { to: '/app/admin/audit', label: 'Audit log', icon: FileText },
 ];
+const NAV_TEAM: Nav = { to: '/app/team', label: 'Team', icon: UsersRound };
 
 const PAGE: Record<string, string> = {
   '/app': 'Dashboard', '/app/sources': 'Sources', '/app/reconstruct': 'Reconstruct', '/app/review': 'Review',
   '/app/conflicts': 'Conflicts', '/app/timeline': 'Timeline', '/app/view-as': 'View as', '/app/approval': 'Approval',
-  '/app/share': 'Share', '/app/admin/users': 'Users & groups', '/app/admin/audit': 'Audit log',
+  '/app/share': 'Share', '/app/admin/users': 'People & groups', '/app/admin/projects': 'Projects',
+  '/app/admin/audit': 'Audit log', '/app/team': 'Team',
 };
 
 function NavItem({ item, onClick }: { item: Nav; onClick?: () => void }) {
@@ -55,7 +58,9 @@ function NavItem({ item, onClick }: { item: Nav; onClick?: () => void }) {
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user, session, signOut } = useAuth();
   const navigate = useNavigate();
+  // A pure admin (not leading a project) sees only the organisation section.
   const isAdmin = user?.appRole === 'admin';
+  const canAdmin = !!session?.isAdmin;
   const { data: summary } = useSummary(session?.handover?.id);
   const counts: Record<string, number | undefined> = {
     '/app/review': summary ? (summary.byReviewState.PENDING ?? 0) + (summary.byReviewState.NEEDS_INFO ?? 0) : undefined,
@@ -77,10 +82,15 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <>
             <p className="overline px-2.5 pt-4 pb-1.5 text-ink-400">Handover · {session?.handover?.departingName ?? 'none yet'}</p>
             {NAV_MAIN.map(n => <NavItem key={n.to} item={{ ...n, count: counts[n.to] }} onClick={onNavigate} />)}
+            {user?.appRole === 'lead' && <NavItem item={NAV_TEAM} onClick={onNavigate} />}
           </>
         )}
-        <p className="overline px-2.5 pt-4 pb-1.5 text-ink-400">Organisation</p>
-        {NAV_ADMIN.map(n => <NavItem key={n.to} item={n} onClick={onNavigate} />)}
+        {canAdmin && (
+          <>
+            <p className="overline px-2.5 pt-4 pb-1.5 text-ink-400">Organisation</p>
+            {NAV_ADMIN.map(n => <NavItem key={n.to} item={n} onClick={onNavigate} />)}
+          </>
+        )}
       </nav>
       <div className="flex-1" />
       {user && (
@@ -105,7 +115,7 @@ export function AppShell() {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const project = session?.project?.name ?? session?.workspace.name ?? 'Workspace';
-  const inHandover = !['/app', '/app/admin/users', '/app/admin/audit'].includes(pathname);
+  const inHandover = !['/app', '/app/team'].includes(pathname) && !pathname.startsWith('/app/admin');
   const crumbs = [project, ...(inHandover && session?.handover ? ['Handover · ' + session.handover.departingName] : []), PAGE[pathname] ?? 'Baton'];
   return (
     <div className="flex min-h-dvh">

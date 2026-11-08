@@ -20,6 +20,10 @@ public enum ErrorCode {
     LLM_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE),
     /** Workspace sign-up: the name is in use. */
     WORKSPACE_TAKEN(HttpStatus.CONFLICT),
+    /** Admin: an email, group or project name is already used in this workspace. */
+    ALREADY_EXISTS(HttpStatus.CONFLICT),
+    /** Admin: a change that would lock the workspace out (last admin, own account) or orphan data (group in use). */
+    NOT_ALLOWED(HttpStatus.CONFLICT),
     /** Workspace sign-up: Baton could not connect to the company's database. */
     DATABASE_UNREACHABLE(HttpStatus.UNPROCESSABLE_ENTITY),
     /** Workspace sign-up: the database is reachable but not usable (not empty, no pgvector, too old, private host). */

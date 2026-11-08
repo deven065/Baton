@@ -1,5 +1,7 @@
 import { AlertTriangle, Info, KeyRound, MessageCircle, Plug, type LucideIcon } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { StartHandoverModal } from './StartHandover';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, Card, CardHeader, PageHeader, QueryState, Segments, StatCard, Table, Td } from '@/components/ui/misc';
@@ -21,6 +23,7 @@ const initials = (n: string) => n.split(/\s+/).map(w => w[0]).join('').slice(0, 
 
 export default function Dashboard() {
   const { user, project, handover } = useSession();
+  const [starting, setStarting] = useState(false);
   const handovers = useHandoverList(project?.id);
   const { data: summary } = useSummary(handover?.id);
   const { data: gaps = [] } = useGapList(handover?.id);
@@ -37,15 +40,16 @@ export default function Dashboard() {
   if (toReview) attention.push({ icon: Info, tone: 'bg-inferred-bg text-inferred', title: `${toReview} claims need a decision`, desc: `${inferred} inferred · ${missing} missing evidence · ${summary?.critical ?? 0} marked critical`, action: 'Review', to: '/app/review' });
   if (access) attention.push({ icon: KeyRound, tone: 'bg-missing-bg text-missing', title: `${access} item${access > 1 ? 's have' : ' has'} no owner`, desc: 'Accounts or work with nobody named. These are exit-interview questions.', action: 'See questions', to: '/app/review' });
   if (gaps.length) attention.push({ icon: MessageCircle, tone: 'bg-single-bg text-single', title: `Exit interview: ${answered.length} of ${gaps.length} answered`, desc: handover ? `${handover.departingName} answers these in their exit interview.` : '', action: 'Review', to: '/app/review' });
-  if (!handover) attention.push({ icon: Plug, tone: 'bg-brand-50 text-brand-700', title: 'No handover yet', desc: 'Connect sources, then start a handover for the person leaving.', action: 'Connect', to: '/app/sources' });
+  if (!handover) attention.push({ icon: Plug, tone: 'bg-brand-50 text-brand-700', title: 'No handover yet', desc: 'Add the person leaving to your team, connect sources, then start their handover.', action: 'Connect sources', to: '/app/sources' });
 
   return (
     <>
       <PageHeader
         title={`${greeting()}, ${user.name.split(' ')[0]}`}
         sub={`${handovers.data?.length ?? 0} handover${handovers.data?.length === 1 ? '' : 's'} in ${project?.name ?? 'your organisation'}`}
-        right={<><Link to="/app/sources"><Button>Add a source</Button></Link><Link to="/app/reconstruct"><Button kind="primary">Reconstruct</Button></Link></>}
+        right={<><Link to="/app/sources"><Button>Add a source</Button></Link><Button kind="primary" onClick={() => setStarting(true)}>Start a handover</Button></>}
       />
+      {starting && <StartHandoverModal onClose={() => setStarting(false)} />}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Claims" value={String(summary?.total ?? '–')} note={summary ? `${summary.byStatus.VERIFIED ?? 0} verified · ${summary.byStatus.SINGLE_SOURCE ?? 0} single source` : 'No handover yet'} />
         <StatCard label="Claims to review" value={String(summary ? toReview : '–')} note={`${inferred} inferred · ${missing} missing evidence`} />

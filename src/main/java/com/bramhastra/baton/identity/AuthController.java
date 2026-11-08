@@ -66,11 +66,12 @@ public class AuthController {
     }
 
     public record UserView(UUID id, String email, String displayName, OrgRole orgRole,
-                           Sensitivity clearance, Set<String> groups, WorkspaceView workspace) {
+                           Sensitivity clearance, Set<String> groups, boolean mustChangePassword,
+                           WorkspaceView workspace) {
         static UserView of(CurrentUser u) {
             Tenant t = TenantContext.require();
             return new UserView(u.id(), u.email(), u.displayName(), u.orgRole(), u.clearance(), u.groups(),
-                    new WorkspaceView(t.slug(), t.name()));
+                    u.mustChangePassword(), new WorkspaceView(t.slug(), t.name()));
         }
     }
 

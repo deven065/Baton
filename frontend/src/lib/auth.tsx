@@ -11,6 +11,16 @@ export interface Session {
   workspace: { slug: string; name: string };
   /** The handover this person works on: the lead's latest one, or the leaver's own. */
   handover: HandoverDto | null;
+  /** Organisation admin (manages people, groups and projects), whatever their project role. */
+  isAdmin: boolean;
+  /** Set after an admin created or reset the account: the person must pick their own password first. */
+  mustChangePassword: boolean;
+}
+
+export interface WorkspaceRegistration {
+  slug: string; name: string;
+  database: { url: string; username?: string; password?: string };
+  admin: { displayName: string; email: string; password: string };
 }
 
 interface Auth {
@@ -19,6 +29,10 @@ interface Auth {
   user: Person | null;
   loading: boolean;
   signIn: (workspace: string, email: string, password: string) => Promise<Session>;
+  /** Creates a company workspace on its own database and signs its first admin in. */
+  register: (r: WorkspaceRegistration) => Promise<Session>;
+  /** Re-reads the session (after a password change, a new handover or a membership change). */
+  refresh: () => Promise<Session | null>;
   signOut: () => void;
 }
 
@@ -51,7 +65,7 @@ async function resolveSession(me: UserDto): Promise<Session> {
     clearance: sens(me.clearance), groups: me.groups, appRole: role,
     role: { lead: 'Project lead', leaver: 'Departing member', recipient: 'Team member', admin: 'Organisation admin' }[role],
   };
-  return { user, role, project, handover, workspace: me.workspace };
+  return { user, role, project, handover, workspace: me.workspace, isAdmin: me.orgRole === 'ADMIN', mustChangePassword: me.mustChangePassword };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -87,7 +101,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return s;
   }, [qc]);
 
-  return <Ctx.Provider value={{ session, user: session?.user ?? null, loading, signIn, signOut }}>{children}</Ctx.Provider>;
+  const register = useCallback(async (r: WorkspaceRegistration) => {
+    const res = await api<{ token: string; user: UserDto }>('/api/workspaces', { method: 'POST', json: r });
+    try { localStorage.setItem(WORKSPACE_KEY, r.slug); } catch { /* private mode */ }
+    setToken(res.token);
+    qc.clear();
+    const s = await resolveSession(res.user);
+    setSession(s);
+    return s;
+  }, [qc]);
+
+  const refresh = useCallback(async () => {
+    if (!getToken()) return null;
+    const s = await resolveSession(await api<UserDto>('/api/me'));
+    setSession(s);
+    return s;
+  }, []);
+
+  return <Ctx.Provider value={{ session, user: session?.user ?? null, loading, signIn, register, refresh, signOut }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth() {

@@ -1,4 +1,4 @@
-import { Check, ChevronRight, Info, Lock } from 'lucide-react';
+import { Check, ChevronRight, Lock } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SensitivityChip, StatusBadge } from '@/components/ui/badge';
@@ -7,7 +7,6 @@ import { Checkbox, Field, Input } from '@/components/ui/form';
 import { Avatar, Banner, Card, EvidenceQuote, Logo } from '@/components/ui/misc';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD, DEMO_WORKSPACE, HOME, lastWorkspace, useAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/http';
-import { cn } from '@/lib/utils';
 
 function BrandPanel({ over, title, sub, children }: { over: string; title: string; sub: string; children?: ReactNode }) {
   return (
@@ -103,83 +102,6 @@ export function LoginPage() {
           )}
           <p className="text-center text-small text-ink-500">New to Baton? <Link to="/signup" className="font-medium text-brand-600 hover:underline">Create an account</Link></p>
         </div>
-      </div>
-    </div>
-  );
-}
-
-const ROLES = [
-  { id: 'lead', title: 'Project lead', desc: 'Reviews and approves' },
-  { id: 'member', title: 'Team member', desc: 'Leaves or receives' },
-  { id: 'admin', title: 'Org admin', desc: 'Users and groups' },
-];
-
-export function SignupPage() {
-  const [submitted, setSubmitted] = useState(false);
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState('lead');
-  const [agree, setAgree] = useState(false);
-  const strength = Math.min(4, Math.floor(password.length / 4));
-  const label = ['Too short', 'Weak', 'Fair', 'Good', 'Strong'][strength];
-
-  return (
-    <div className="flex min-h-dvh bg-card">
-      <BrandPanel over="Get started" title="Set up a handover workspace in two minutes." sub="Baton turns records your team already has into a verified continuation plan — before anyone leaves.">
-        <ol className="flex flex-col gap-3.5">
-          {[['Create your organisation', 'Your club, startup or NGO.'], ['Invite people and set access groups', 'engineering · design · operations'], ['Connect a project’s sources', 'GitHub, task CSV, notes, chat export']].map(([t, d], i) => (
-            <li key={t} className="flex items-center gap-3.5">
-              <span className="grid size-8 place-items-center rounded-full bg-inverse-raised text-small font-medium text-baton">{i + 1}</span>
-              <span><span className="block font-medium text-white">{t}</span><span className="block text-small text-inverse-muted">{d}</span></span>
-            </li>
-          ))}
-        </ol>
-      </BrandPanel>
-      <div className="flex flex-1 items-center justify-center px-4 py-10">
-        <form
-          className="flex w-full max-w-[440px] flex-col gap-4"
-          onSubmit={e => { e.preventDefault(); if (agree) setSubmitted(true); }}
-        >
-          <div className="lg:hidden"><Logo /></div>
-          <div>
-            <p className="overline text-brand-600">Step 1 of 2</p>
-            <h1 className="text-h1 font-semibold">Create your account</h1>
-            <p className="mt-1.5 text-ink-500">You’ll invite your team on the next step.</p>
-          </div>
-          <Field label="Full name">{id => <Input id={id} autoComplete="name" defaultValue="Priya Nair" />}</Field>
-          <Field label="Club or work email">{id => <Input id={id} type="email" autoComplete="email" defaultValue="priya.nair@northfield.club" />}</Field>
-          <Field
-            label="Password"
-            hint={
-              <div className="flex flex-col gap-1.5">
-                <div className="flex gap-1" aria-hidden>{[0, 1, 2, 3].map(i => <span key={i} className={cn('h-1 flex-1 rounded-full', i < strength ? 'bg-verified' : 'bg-line')} />)}</div>
-                <p className={cn('text-caption font-medium', strength >= 3 ? 'text-verified' : 'text-ink-500')}>{label} · {password.length} characters, stored with BCrypt</p>
-              </div>
-            }
-          >
-            {id => <Input id={id} type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 12 characters" />}
-          </Field>
-          <Field label="Organisation name">{id => <Input id={id} defaultValue="Northfield Tech Club" />}</Field>
-          <fieldset className="flex flex-col gap-1.5">
-            <legend className="mb-1.5 text-caption font-medium text-ink-700">Your role</legend>
-            <div className="grid grid-cols-3 gap-2">
-              {ROLES.map(r => (
-                <label key={r.id} className={cn('flex cursor-pointer flex-col gap-0.5 rounded-xl border p-3', role === r.id ? 'border-brand-600 bg-brand-50 ring-1 ring-brand-600' : 'border-line hover:bg-canvas')}>
-                  <input type="radio" name="role" className="sr-only" checked={role === r.id} onChange={() => setRole(r.id)} />
-                  <span className={cn('text-small font-medium', role === r.id ? 'text-brand-700' : 'text-ink-900')}>{r.title}</span>
-                  <span className="text-caption text-ink-500">{r.desc}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <Checkbox checked={agree} onChange={setAgree} label="I agree to the terms. I will only connect sources I’m authorised to share, and I understand Baton redacts secrets before any AI call." />
-          {submitted && (
-            <Banner tone="inferred" icon={Info}>
-              Self sign-up isn’t in the API yet: your organisation admin creates accounts for now. If you have one, <Link to="/login" className="font-medium text-brand-600 underline">sign in</Link>.
-            </Banner>
-          )}
-          <Button kind="primary" size="lg" type="submit" disabled={!agree}>Create account</Button>
-          <p className="text-center text-small text-ink-500">Already have an account? <Link to="/login" className="font-medium text-brand-600 hover:underline">Sign in</Link></p>
-        </form>
       </div>
     </div>
   );

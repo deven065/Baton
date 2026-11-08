@@ -18,7 +18,7 @@ class AccessPolicyTest {
     private final AccessPolicy policy = new AccessPolicy(mock(ProjectMemberRepository.class));
 
     private static CurrentUser viewer(Sensitivity clearance, String... groups) {
-        return new CurrentUser(UUID.randomUUID(), "x@annapurna.test", "X", OrgRole.MEMBER, clearance, Set.of(groups));
+        return new CurrentUser(UUID.randomUUID(), "x@annapurna.test", "X", OrgRole.MEMBER, clearance, Set.of(groups), false);
     }
 
     @Test
