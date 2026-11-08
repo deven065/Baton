@@ -31,7 +31,27 @@ The demo password for every persona is `baton.demo.password` in `application.pro
 ./mvnw test                   # needs Docker: tests run against a real pgvector container
 ```
 
-## API so far (M1 + M2)
+## Try it with the demo data
+
+With the backend running, load the synthetic Project Annapurna sources, create Priya's handover and reconstruct it:
+
+```bash
+bash demo/load-demo.sh
+```
+
+See [demo/annapurna/README.md](demo/annapurna/README.md) for what is planted and what to expect.
+
+## AI modes
+
+| `AI_MOCK` | `GROQ_API_KEY` | Behaviour |
+|---|---|---|
+| `true` (default) | any | **Offline**: replays recorded Groq answers for identical prompts, else a rule-based extractor. No network. |
+| `false` | set | **Groq** (`llama-3.3-70b-versatile`): cache → circuit breaker → rate limit → retry with back-off. Answers are cached, so a later offline demo replays them. |
+
+Either way the model only proposes. Code verifies every quote, computes status and confidence, finds
+conflicts and writes the exit questions.
+
+## API so far (M1 + M2 + M3)
 
 | Method | Path | Notes |
 |---|---|---|
@@ -47,7 +67,21 @@ The demo password for every persona is `baton.demo.password` in `application.pro
 | GET | `/api/jobs/{id}/events` | Server-sent events: `progress` `{stage, percent, message, counts}`, then `done` |
 | GET | `/api/chunks/{id}` | Evidence drawer; 404 if restricted (IDOR-safe) |
 | GET | `/api/projects/{id}/search?q=` | Hybrid keyword + vector search, permission-filtered before ranking |
+| POST | `/api/projects/{id}/handovers` | Lead only: `{departingUserId, title, scenario, aliases?}` |
+| GET | `/api/projects/{id}/handovers` · `/api/handovers/{id}` | Lead and departing member |
+| POST | `/api/handovers/{id}/reconstruct` | Lead only → 202 `{jobId}`; 409 if already running |
+| GET | `/api/handovers/{id}/runs/latest` | Run status, counts, warnings |
+| GET | `/api/handovers/{id}/claims?type=&status=&reviewState=&critical=&page=&size=` | Claims with verified evidence and links |
+| GET | `/api/claims/{id}` | 404 if any cited chunk is hidden from you |
+| GET | `/api/handovers/{id}/gaps` | Exit-interview questions |
+| GET | `/api/handovers/{id}/timeline` · `/api/handovers/{id}/summary` | Decisions over time; counts |
 | GET | `/actuator/health` | Public |
+
+### Reconstruction pipeline (Flow B)
+`SIGNAL` (task board and GitHub, no AI) → `EXTRACT` (redacted chunks in `<chunk>` tags, batched per access class) →
+`VERIFY` (quote located in the chunk by code; verified quotes are cut from the source) → `CONSOLIDATE` →
+`CONFLICT` → `SCORE` (status and confidence per LLD) → `GAP` (6–12 exit questions) → `TIMELINE`.
+Stages are idempotent and resume after a crash. A claim is visible only if you may see **every** chunk it cites.
 
 Source types: `DOCUMENT` and `MEETING_NOTES` (.md, .txt, .pdf, .docx…), `TASK_CSV` (Jira/Trello/GitHub Projects
 export), `CHAT_EXPORT` (Slack export .zip or channel .json), `GITHUB` (read-only REST).

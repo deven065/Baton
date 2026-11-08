@@ -51,6 +51,16 @@ public class AccessPolicy {
                 + alias + ".acl_groups && CAST(:groups AS text[])))";
     }
 
+    /**
+     * SQL rule for a claim (alias with sensitivity and acl_groups): the claim's own class must be visible
+     * AND every chunk it cites, valid or not, must be visible. Stricter than "any one evidence", so a
+     * claim that blends restricted and open sources is shown only to people cleared for all of them.
+     */
+    public String claimSqlPredicate(String alias) {
+        return "(" + sqlPredicate(alias) + " AND NOT EXISTS (SELECT 1 FROM evidence ev_ JOIN chunk ck_ ON ck_.id = ev_.chunk_id"
+                + " WHERE ev_.claim_id = " + alias + ".id AND NOT " + sqlPredicate("ck_") + "))";
+    }
+
     public Map<String, Object> sqlParams(CurrentUser viewer) {
         return Map.of("clearance", viewer.clearance().level(), "groups", toPgArray(viewer.groups()));
     }
