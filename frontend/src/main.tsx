@@ -1,0 +1,79 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { StrictMode, type ReactNode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AppShell, RecipientShell } from '@/components/layout/shells';
+import { AuthProvider, HOME, useAuth } from '@/lib/auth';
+import type { Role } from '@/data/types';
+import { InvitePage, LoginPage, SignupPage } from '@/pages/auth/AuthPages';
+import Dashboard from '@/pages/lead/Dashboard';
+import Sources from '@/pages/lead/Sources';
+import Reconstruct from '@/pages/lead/Reconstruct';
+import Review from '@/pages/lead/Review';
+import Conflicts from '@/pages/lead/Conflicts';
+import Timeline from '@/pages/lead/Timeline';
+import ViewAs from '@/pages/lead/ViewAs';
+import { Approval, Share } from '@/pages/lead/ApprovalShare';
+import ExitInterview from '@/pages/leaver/ExitInterview';
+import { ChecklistPage, Ownership, RecipientTimeline, StartHere } from '@/pages/recipient/RecipientPages';
+import { AuditLog, UsersGroups } from '@/pages/admin/AdminPages';
+import './index.css';
+
+const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false } } });
+
+/** Lets a role in, or sends the user to their own home (UI convenience; the API enforces access). */
+function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <p className="grid min-h-dvh place-items-center text-small text-ink-500" role="status">Loading your workspace…</p>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!roles.includes(user.appRole)) return <Navigate to={HOME[user.appRole]} replace />;
+  return <>{children}</>;
+}
+
+function Home() {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  return <Navigate to={user ? HOME[user.appRole] : '/login'} replace />;
+}
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/invite" element={<InvitePage />} />
+
+            <Route path="/app" element={<RequireRole roles={['lead', 'admin']}><AppShell /></RequireRole>}>
+              <Route index element={<RequireRole roles={['lead']}><Dashboard /></RequireRole>} />
+              <Route path="sources" element={<RequireRole roles={['lead']}><Sources /></RequireRole>} />
+              <Route path="reconstruct" element={<RequireRole roles={['lead']}><Reconstruct /></RequireRole>} />
+              <Route path="review" element={<RequireRole roles={['lead']}><Review /></RequireRole>} />
+              <Route path="conflicts" element={<RequireRole roles={['lead']}><Conflicts /></RequireRole>} />
+              <Route path="timeline" element={<RequireRole roles={['lead']}><Timeline /></RequireRole>} />
+              <Route path="view-as" element={<RequireRole roles={['lead']}><ViewAs /></RequireRole>} />
+              <Route path="approval" element={<RequireRole roles={['lead']}><Approval /></RequireRole>} />
+              <Route path="share" element={<RequireRole roles={['lead']}><Share /></RequireRole>} />
+              <Route path="admin/users" element={<UsersGroups />} />
+              <Route path="admin/audit" element={<AuditLog />} />
+            </Route>
+
+            <Route path="/interview" element={<RequireRole roles={['leaver']}><ExitInterview /></RequireRole>} />
+
+            <Route path="/handover" element={<RequireRole roles={['recipient']}><RecipientShell /></RequireRole>}>
+              <Route index element={<StartHere />} />
+              <Route path="checklist" element={<ChecklistPage />} />
+              <Route path="ownership" element={<Ownership />} />
+              <Route path="timeline" element={<RecipientTimeline />} />
+            </Route>
+
+            <Route path="*" element={<Home />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </QueryClientProvider>
+  </StrictMode>,
+);
