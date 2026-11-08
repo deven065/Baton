@@ -1,0 +1,22 @@
+# Local development database for Baton.
+# Port 5433 on the host, because 5432 is often taken by another Postgres.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: baton-postgres
+    environment:
+      POSTGRES_DB: baton
+      POSTGRES_USER: baton
+      POSTGRES_PASSWORD: baton
+    ports:
+      - "5433:5432"
+    volumes:
+      - baton-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U baton -d baton"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  baton-pgdata:
