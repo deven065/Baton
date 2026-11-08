@@ -72,7 +72,7 @@ public class AccessPolicy {
     }
 
     /** Postgres array literal, e.g. {"engineering","design"}. */
-    static String toPgArray(Collection<String> values) {
+    public static String toPgArray(Collection<String> values) {
         return values.stream()
                 .map(v -> "\"" + v.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
                 .sorted()
