@@ -8,6 +8,7 @@ export interface Session {
   user: Person;
   role: Role;
   project: ProjectDto | null;
+  workspace: { slug: string; name: string };
   /** The handover this person works on: the lead's latest one, or the leaver's own. */
   handover: HandoverDto | null;
 }
@@ -17,7 +18,7 @@ interface Auth {
   /** Shortcut used by most screens. */
   user: Person | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<Session>;
+  signIn: (workspace: string, email: string, password: string) => Promise<Session>;
   signOut: () => void;
 }
 
@@ -50,7 +51,7 @@ async function resolveSession(me: UserDto): Promise<Session> {
     clearance: sens(me.clearance), groups: me.groups, appRole: role,
     role: { lead: 'Project lead', leaver: 'Departing member', recipient: 'Team member', admin: 'Organisation admin' }[role],
   };
-  return { user, role, project, handover };
+  return { user, role, project, handover, workspace: me.workspace };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -76,8 +77,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    const res = await api<{ token: string; user: UserDto }>('/api/auth/login', { method: 'POST', json: { email, password } });
+  const signIn = useCallback(async (workspace: string, email: string, password: string) => {
+    const res = await api<{ token: string; user: UserDto }>('/api/auth/login', { method: 'POST', json: { workspace, email, password } });
+    try { localStorage.setItem(WORKSPACE_KEY, workspace); } catch { /* private mode */ }
     setToken(res.token);
     qc.clear();
     const s = await resolveSession(res.user);
@@ -117,3 +119,10 @@ export const DEMO_ACCOUNTS = [
   { email: 'admin@annapurna.test', name: 'Org Admin', role: 'Organisation admin', clearance: 'Internal' as const },
 ];
 export const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD as string | undefined;
+export const DEMO_WORKSPACE = 'demo';
+
+const WORKSPACE_KEY = 'baton.workspace';
+/** The workspace this browser last signed in to, to pre-fill the sign-in form. */
+export function lastWorkspace(): string {
+  try { return localStorage.getItem(WORKSPACE_KEY) ?? ''; } catch { return ''; }
+}

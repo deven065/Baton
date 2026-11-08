@@ -68,7 +68,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <span className="grid size-8 place-items-center rounded-lg bg-brand-100 text-brand-700"><Layers className="size-4" aria-hidden /></span>
         <span className="flex-1">
           <span className="block text-small font-medium">{session?.project?.name ?? 'No project'}</span>
-          <span className="block text-caption text-ink-500">{session?.project ? 'Your role: ' + (session.project.myRole === 'PROJECT_LEAD' ? 'project lead' : 'member') : 'Organisation'}</span>
+          <span className="block text-caption text-ink-500">{session?.workspace.name ?? 'Workspace'}</span>
         </span>
         <ChevronDown className="size-3.5 text-ink-400" aria-hidden />
       </button>
@@ -104,7 +104,7 @@ export function AppShell() {
   const { user, session } = useAuth();
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
-  const project = session?.project?.name ?? 'Organisation';
+  const project = session?.project?.name ?? session?.workspace.name ?? 'Workspace';
   const inHandover = !['/app', '/app/admin/users', '/app/admin/audit'].includes(pathname);
   const crumbs = [project, ...(inHandover && session?.handover ? ['Handover · ' + session.handover.departingName] : []), PAGE[pathname] ?? 'Baton'];
   return (

@@ -10,7 +10,11 @@ export type ReviewStateDto = 'PENDING' | 'ACCEPTED' | 'EDITED' | 'REJECTED' | 'N
 export type HandoverStatusDto = 'DRAFT' | 'RECONSTRUCTING' | 'IN_REVIEW' | 'APPROVED' | 'SHARED' | 'ARCHIVED';
 export type SourceTypeDto = 'GITHUB' | 'TASK_CSV' | 'DOCUMENT' | 'MEETING_NOTES' | 'CHAT_EXPORT' | 'TESTIMONY';
 
-export interface UserDto { id: string; email: string; displayName: string; orgRole: 'ADMIN' | 'MEMBER'; clearance: SensitivityDto; groups: string[] }
+export interface UserDto {
+  id: string; email: string; displayName: string; orgRole: 'ADMIN' | 'MEMBER'; clearance: SensitivityDto; groups: string[];
+  /** The company workspace this session belongs to (each has its own database). */
+  workspace: { slug: string; name: string };
+}
 export interface ProjectDto { id: string; name: string; description: string; myRole: 'PROJECT_LEAD' | 'MEMBER' }
 export interface MemberDto { userId: string; displayName: string; role: 'PROJECT_LEAD' | 'MEMBER'; clearance: SensitivityDto }
 export interface ProjectDetailDto extends ProjectDto { members: MemberDto[] }

@@ -12,6 +12,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
 import com.bramhastra.baton.identity.AppUser;
+import com.bramhastra.baton.tenant.Tenant;
 
 @Service
 public class JwtService {
@@ -24,7 +25,7 @@ public class JwtService {
         this.expiry = Duration.ofHours(expiryHours);
     }
 
-    public IssuedToken issue(AppUser user) {
+    public IssuedToken issue(AppUser user, Tenant tenant) {
         Instant now = Instant.now();
         Instant expiresAt = now.plus(expiry);
         JwtClaimsSet claims = JwtClaimsSet.builder()
@@ -33,6 +34,9 @@ public class JwtService {
                 .issuedAt(now)
                 .expiresAt(expiresAt)
                 .claim("name", user.getDisplayName())
+                // The workspace is part of the signed token: every request is routed to this company's database.
+                .claim("tid", tenant.id().toString())
+                .claim("ws", tenant.slug())
                 .build();
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         String token = encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();

@@ -17,10 +17,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.bramhastra.baton.tenant.Tenant;
+import com.bramhastra.baton.tenant.TenantActivity;
+import com.bramhastra.baton.tenant.TenantContext;
+import com.bramhastra.baton.tenant.TenantRegistry;
+
 import jakarta.annotation.PreDestroy;
 
 /**
- * Polls the job table every second and runs claimed jobs on a small pool.
+ * Polls each warm workspace's job table every second and runs claimed jobs on a small shared pool, each job
+ * inside its own workspace (so it only ever touches that company's database).
  * Progress is persisted (so a reload or another instance sees it) and pushed over SSE.
  */
 @Component
@@ -34,12 +40,17 @@ public class JobWorker {
     private final boolean enabled;
     private final Semaphore slots;
     private final ExecutorService executor;
-    private final Set<UUID> running = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Tenant> running = new ConcurrentHashMap<>();
+    private final TenantActivity activity;
+    private final TenantRegistry registry;
 
-    public JobWorker(JobRepository jobs, SseHub sse, List<JobHandler> handlerList,
+    public JobWorker(JobRepository jobs, SseHub sse, List<JobHandler> handlerList, TenantActivity activity,
+                     TenantRegistry registry,
                      @Value("${baton.jobs.enabled:true}") boolean enabled,
                      @Value("${baton.jobs.concurrency:2}") int concurrency) {
         this.jobs = jobs;
+        this.activity = activity;
+        this.registry = registry;
         this.sse = sse;
         handlerList.forEach(h -> handlers.put(h.kind(), h));
         this.enabled = enabled;
@@ -56,30 +67,41 @@ public class JobWorker {
         if (!enabled) {
             return;
         }
+        for (Tenant tenant : activity.warm()) {
+            if (!pollTenant(tenant)) {
+                return; // no free slots left
+            }
+        }
+    }
+
+    /** Claims jobs for one workspace while slots are free. Returns false when the pool is full. */
+    private boolean pollTenant(Tenant tenant) {
         while (slots.tryAcquire()) {
             Optional<Job> next;
             try {
-                next = jobs.claimNext();
+                next = TenantContext.call(tenant, jobs::claimNext);
             } catch (RuntimeException e) {
                 slots.release();
-                log.warn("Could not claim job: {}", e.getMessage());
-                return;
+                // One company's database being down must not stop the others' jobs.
+                log.warn("Could not claim job in workspace '{}': {}", tenant.slug(), e.getMessage());
+                return true;
             }
             if (next.isEmpty()) {
                 slots.release();
-                return;
+                return true;
             }
             Job job = next.get();
-            running.add(job.id());
+            running.put(job.id(), tenant);
             executor.submit(() -> {
                 try {
-                    run(job);
+                    TenantContext.run(tenant, () -> run(job));
                 } finally {
                     running.remove(job.id());
                     slots.release();
                 }
             });
         }
+        return false;
     }
 
     private void run(Job job) {
@@ -113,14 +135,28 @@ public class JobWorker {
 
     @Scheduled(fixedDelay = 30_000)
     void heartbeat() {
-        jobs.heartbeat(Set.copyOf(running));
+        Map<Tenant, List<UUID>> byTenant = new java.util.HashMap<>();
+        running.forEach((jobId, t) -> byTenant.computeIfAbsent(t, k -> new java.util.ArrayList<>()).add(jobId));
+        byTenant.forEach((t, ids) -> {
+            try {
+                TenantContext.run(t, () -> jobs.heartbeat(Set.copyOf(ids)));
+            } catch (RuntimeException e) {
+                log.warn("Heartbeat failed in workspace '{}': {}", t.slug(), e.getMessage());
+            }
+        });
     }
 
     @Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
     void reap() {
-        int n = jobs.reapStuck();
-        if (n > 0) {
-            log.info("Requeued or failed {} stuck job(s)", n);
+        for (Tenant t : activity.warm()) {
+            try {
+                int n = TenantContext.call(t, jobs::reapStuck);
+                if (n > 0) {
+                    log.info("Requeued or failed {} stuck job(s) in workspace '{}'", n, t.slug());
+                }
+            } catch (RuntimeException e) {
+                log.warn("Reaping failed in workspace '{}': {}", t.slug(), e.getMessage());
+            }
         }
     }
 

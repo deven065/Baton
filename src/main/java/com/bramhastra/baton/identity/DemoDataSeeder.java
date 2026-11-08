@@ -13,9 +13,12 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.bramhastra.baton.common.Sensitivity;
+import com.bramhastra.baton.tenant.TenantContext;
+import com.bramhastra.baton.tenant.TenantRegistry;
 
 /**
  * Seeds the synthetic "Project Annapurna" team on an empty database.
@@ -35,10 +38,15 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final ProjectMemberRepository members;
     private final PasswordEncoder passwords;
     private final String demoPassword;
+    private final TenantRegistry tenants;
+    private final TransactionTemplate tx;
 
     public DemoDataSeeder(AppUserRepository users, UserGroupRepository groups, ProjectRepository projects,
                           ProjectMemberRepository members, PasswordEncoder passwords,
-                          @Value("${baton.demo.password}") String demoPassword) {
+                          @Value("${baton.demo.password}") String demoPassword, TenantRegistry tenants,
+                          PlatformTransactionManager txManager) {
+        this.tenants = tenants;
+        this.tx = new TransactionTemplate(txManager);
         this.users = users;
         this.groups = groups;
         this.projects = projects;
@@ -64,8 +72,13 @@ public class DemoDataSeeder implements ApplicationRunner {
                     Set.of("design"), ProjectRole.MEMBER));
 
     @Override
-    @Transactional
     public void run(ApplicationArguments args) {
+        // Seed the demo workspace only (Baton's own database), never a company's.
+        tenants.bySlug(TenantRegistry.DEMO_SLUG).ifPresent(demo ->
+                TenantContext.run(demo, () -> tx.executeWithoutResult(s -> seed())));
+    }
+
+    private void seed() {
         if (users.count() > 0) {
             return;
         }

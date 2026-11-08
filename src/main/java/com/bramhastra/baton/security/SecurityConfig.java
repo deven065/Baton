@@ -1,5 +1,11 @@
 package com.bramhastra.baton.security;
 
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
+
+import com.bramhastra.baton.tenant.TenantActivity;
+import com.bramhastra.baton.tenant.TenantFilter;
+import com.bramhastra.baton.tenant.TenantRegistry;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -37,19 +43,24 @@ import jakarta.servlet.http.HttpServletResponse;
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain api(HttpSecurity http) throws Exception {
+    SecurityFilterChain api(HttpSecurity http, TenantRegistry tenants, TenantActivity activity) throws Exception {
         http
                 .csrf(csrf -> csrf.disable()) // stateless: JWT held in memory, no cookies
                 .cors(Customizer.withDefaults())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        // Workspace sign-up and the sign-in page's "does this workspace exist" lookup.
+                        .requestMatchers(HttpMethod.POST, "/api/workspaces").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/workspaces/*").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(o -> o
                         .jwt(Customizer.withDefaults())
                         .authenticationEntryPoint(unauthenticated()))
+                // Route every authenticated request to its workspace's own database.
+                .addFilterAfter(new TenantFilter(tenants, activity), BearerTokenAuthenticationFilter.class)
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(unauthenticated())
                         .accessDeniedHandler(forbidden()));

@@ -18,6 +18,12 @@ public enum ErrorCode {
     FILE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE),
     UNSUPPORTED_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE),
     LLM_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE),
+    /** Workspace sign-up: the name is in use. */
+    WORKSPACE_TAKEN(HttpStatus.CONFLICT),
+    /** Workspace sign-up: Baton could not connect to the company's database. */
+    DATABASE_UNREACHABLE(HttpStatus.UNPROCESSABLE_ENTITY),
+    /** Workspace sign-up: the database is reachable but not usable (not empty, no pgvector, too old, private host). */
+    DATABASE_UNSUITABLE(HttpStatus.UNPROCESSABLE_ENTITY),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final HttpStatus status;

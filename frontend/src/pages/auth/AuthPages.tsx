@@ -5,7 +5,7 @@ import { SensitivityChip, StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Field, Input } from '@/components/ui/form';
 import { Avatar, Banner, Card, EvidenceQuote, Logo } from '@/components/ui/misc';
-import { DEMO_ACCOUNTS, DEMO_PASSWORD, HOME, useAuth } from '@/lib/auth';
+import { DEMO_ACCOUNTS, DEMO_PASSWORD, DEMO_WORKSPACE, HOME, lastWorkspace, useAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/http';
 import { cn } from '@/lib/utils';
 
@@ -27,28 +27,29 @@ function BrandPanel({ over, title, sub, children }: { over: string; title: strin
 export function LoginPage() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const [workspace, setWorkspace] = useState(lastWorkspace);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
 
-  const go = async (e: string, p: string) => {
+  const go = async (ws: string, e: string, p: string) => {
     setError('');
     setBusy(e);
     try {
-      const s = await signIn(e, p);
+      const s = await signIn(ws, e, p);
       navigate(HOME[s.role]);
     } catch (err) {
-      setError(err instanceof ApiError && err.status === 401 ? 'That email and password don’t match an account.' : (err as Error).message);
+      setError(err instanceof ApiError && err.status === 401 ? 'That workspace, email and password don’t match an account.' : (err as Error).message);
     } finally {
       setBusy(null);
     }
   };
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password) { setError('Enter your email and password.'); return; }
-    go(email.trim(), password);
+    if (!workspace.trim() || !email.trim() || !password) { setError('Enter your workspace, email and password.'); return; }
+    go(workspace.trim().toLowerCase(), email.trim(), password);
   };
 
   return (
@@ -68,6 +69,9 @@ export function LoginPage() {
             <p className="mt-1.5 text-ink-500">Use your club or team account.</p>
           </div>
           <form onSubmit={submit} className="flex flex-col gap-[18px]" noValidate>
+            <Field label="Workspace" hint={<p className="text-caption text-ink-500">Your company’s workspace name, e.g. <span className="font-mono">acme</span>. Try <span className="font-mono">demo</span> for the sample project.</p>}>
+              {id => <Input id={id} autoComplete="organization" autoCapitalize="none" spellCheck={false} value={workspace} onChange={e => setWorkspace(e.target.value)} placeholder="acme" invalid={!!error} />}
+            </Field>
             <Field label="Email">{id => <Input id={id} type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} invalid={!!error} />}</Field>
             <Field label="Password">{id => <Input id={id} type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />}</Field>
             {error && <p role="alert" className="text-small text-conflict">{error}</p>}
@@ -79,11 +83,11 @@ export function LoginPage() {
           </form>
           {DEMO_PASSWORD && (
             <>
-              <div className="flex items-center gap-3 text-caption text-ink-400"><span className="h-px flex-1 bg-line" />or explore with a demo persona<span className="h-px flex-1 bg-line" /></div>
+              <div className="flex items-center gap-3 text-caption text-ink-400"><span className="h-px flex-1 bg-line" />or explore the demo workspace<span className="h-px flex-1 bg-line" /></div>
               <ul className="flex flex-col gap-2" aria-label="Demo personas">
                 {DEMO_ACCOUNTS.map((p, i) => (
                   <li key={p.email}>
-                    <button type="button" disabled={!!busy} onClick={() => go(p.email, DEMO_PASSWORD ?? "")} className="flex w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left hover:border-brand-600 hover:bg-brand-50 cursor-pointer disabled:opacity-60">
+                    <button type="button" disabled={!!busy} onClick={() => go(DEMO_WORKSPACE, p.email, DEMO_PASSWORD ?? "")} className="flex w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left hover:border-brand-600 hover:bg-brand-50 cursor-pointer disabled:opacity-60">
                       <Avatar initials={p.name.split(' ').map(w => w[0]).join('')} tone={i} size="sm" />
                       <span className="flex-1">
                         <span className="block text-small font-medium">{p.name}</span>

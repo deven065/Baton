@@ -27,6 +27,9 @@ import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequ
 import com.bramhastra.baton.TestcontainersConfigurationAccess;
 import com.bramhastra.baton.identity.DemoDataSeeder;
 import com.bramhastra.baton.security.CryptoService;
+import com.bramhastra.baton.tenant.Tenant;
+import com.bramhastra.baton.tenant.TenantContext;
+import com.bramhastra.baton.tenant.TenantRegistry;
 import com.jayway.jsonpath.JsonPath;
 
 /** Flow A end to end, plus the permission-leak checks for sources, chunks and search. */
@@ -34,6 +37,9 @@ import com.jayway.jsonpath.JsonPath;
 @AutoConfigureMockMvc
 @Import(TestcontainersConfigurationAccess.Config.class)
 class SourceIngestApiTest {
+
+    @Autowired
+    TenantRegistry tenants;
 
     @Autowired
     MockMvc mvc;
@@ -123,7 +129,9 @@ class SourceIngestApiTest {
                 WHERE d.source_id = :s AND t.token = '[API_KEY_1]'
                 """).param("s", UUID.fromString(sourceId))
                 .query((rs, n) -> new byte[][] {rs.getBytes(1), rs.getBytes(2)}).single();
-        assertThat(new String(crypto.decrypt(sealed[0], sealed[1]), StandardCharsets.UTF_8))
+        // Decryption uses the workspace's own data key, so the test must say which workspace it is in.
+        Tenant demoWs = tenants.bySlug(TenantRegistry.DEMO_SLUG).orElseThrow();
+        assertThat(new String(TenantContext.call(demoWs, () -> crypto.decrypt(sealed[0], sealed[1])), StandardCharsets.UTF_8))
                 .isEqualTo(RedactorTest.FAKE_GROQ_KEY);
 
         // Staged upload is deleted after ingest
