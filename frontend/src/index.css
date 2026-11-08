@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/* Design tokens — same values as the "Baton tokens" variables in Figma. */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink-900: #0e1726;
+  --color-ink-700: #2a3547;
+  --color-ink-500: #5b6576;
+  --color-ink-400: #8a93a3;
+  --color-ink-300: #b4bbc6;
+
+  --color-line: #e3e6ec;
+  --color-line-strong: #cdd2db;
+
+  --color-canvas: #f5f6f8;
+  --color-card: #ffffff;
+  --color-subtle: #eef0f4;
+  --color-paper: #fbf7ee;
+  --color-inverse: #0e1726;
+  --color-inverse-raised: #1b2638;
+  --color-inverse-muted: #9aa4b5;
+
+  --color-brand-700: #2635a8;
+  --color-brand-600: #3446d4;
+  --color-brand-100: #dde2fb;
+  --color-brand-50: #eef0fd;
+  --color-baton: #e8a33d;
+
+  --color-verified: #127a4b;
+  --color-verified-bg: #e3f4eb;
+  --color-single: #1f6fb2;
+  --color-single-bg: #e4effa;
+  --color-inferred: #9a5800;
+  --color-inferred-bg: #fdf0d9;
+  --color-conflict: #c0322b;
+  --color-conflict-bg: #fce7e5;
+  --color-missing: #6b4fbb;
+  --color-missing-bg: #efeafb;
+  --color-stale: #6b7280;
+  --color-stale-bg: #eef0f3;
+  --color-confidential: #9a3412;
+  --color-confidential-bg: #fdebe1;
+
+  /* Type scale (Baton/… text styles) */
+  --text-display: 44px;
+  --text-display--line-height: 52px;
+  --text-display--letter-spacing: -0.02em;
+  --text-h1: 28px;
+  --text-h1--line-height: 36px;
+  --text-h1--letter-spacing: -0.01em;
+  --text-h2: 20px;
+  --text-h2--line-height: 28px;
+  --text-h3: 16px;
+  --text-h3--line-height: 24px;
+  --text-body-l: 16px;
+  --text-body-l--line-height: 24px;
+  --text-body: 14px;
+  --text-body--line-height: 20px;
+  --text-small: 13px;
+  --text-small--line-height: 18px;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-overline: 11px;
+  --text-overline--line-height: 16px;
+  --text-stat: 30px;
+  --text-stat--line-height: 36px;
+
+  --shadow-card: 0 1px 3px rgb(14 23 38 / 0.05);
+  --shadow-pop: 0 16px 40px rgb(14 23 38 / 0.18), 0 2px 6px rgb(14 23 38 / 0.06);
+}
+
+@layer base {
+  html { -webkit-font-smoothing: antialiased; }
+  body { @apply bg-canvas text-ink-900 font-sans text-body; }
+  :focus-visible { outline: 2px solid var(--color-brand-600); outline-offset: 2px; }
+}
+
+@utility overline {
+  font-size: var(--text-overline);
+  line-height: var(--text-overline--line-height);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
