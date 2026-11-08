@@ -71,7 +71,7 @@ public class GapStage implements PipelineStage {
     @Override
     public void execute(PipelineContext ctx) {
         UUID h = ctx.handover().id();
-        jdbc.sql("DELETE FROM gap_question WHERE handover_id = :h AND status IN ('OPEN', 'UNANSWERED')")
+        jdbc.sql("DELETE FROM gap_question WHERE handover_id = :h AND status IN ('OPEN', 'UNANSWERED') AND kind <> 'OTHER'")
                 .param("h", h).update();
         Set<String> alreadyAnswered = new HashSet<>(jdbc.sql(
                 "SELECT question FROM gap_question WHERE handover_id = :h").param("h", h).query(String.class).list());

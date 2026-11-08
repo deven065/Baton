@@ -2,16 +2,11 @@ package com.bramhastra.baton.reconstruct;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -21,13 +16,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.bramhastra.baton.TestcontainersConfigurationAccess;
-import com.bramhastra.baton.identity.DemoDataSeeder;
+import com.bramhastra.baton.DemoFixture;
 import com.jayway.jsonpath.JsonPath;
 
 /**
@@ -49,44 +42,19 @@ class ReconstructApiTest {
     @Value("${baton.demo.password}")
     String demoPassword;
 
-    UUID projectId;
+    DemoFixture demo;
     String neha;
     String handoverId;
 
     @BeforeAll
     void loadDemoAndReconstruct() throws Exception {
-        projectId = jdbc.sql("SELECT id FROM project WHERE name = :n").param("n", DemoDataSeeder.PROJECT_NAME)
-                .query(UUID.class).single();
-        neha = login("neha@annapurna.test");
-        List<String> jobs = new ArrayList<>();
-        jobs.add(upload("MEETING_NOTES", "Weekly sync", "INTERNAL", null, "2026-10-08-weekly-sync.md"));
-        jobs.add(upload("CHAT_EXPORT", "Slack #dev", "INTERNAL", null, "dev.json"));
-        jobs.add(upload("TASK_CSV", "Jira export", "INTERNAL", null, "tasks.csv"));
-        jobs.add(upload("DOCUMENT", "Architecture notes", "CONFIDENTIAL", "engineering", "architecture.md"));
-        jobs.add(upload("DOCUMENT", "Vendor contract", "RESTRICTED", "operations", "vendor-contract.md"));
-        for (String job : jobs) {
-            assertThat(awaitJob(neha, job)).isEqualTo("SUCCEEDED");
-        }
-        // other test classes may share this database; wait for their sources too
-        for (int i = 0; i < 100 && jdbc.sql("SELECT count(*) FROM source WHERE status IN ('PENDING','SYNCING')")
-                .query(Integer.class).single() > 0; i++) {
-            Thread.sleep(200);
-        }
-
-        UUID priya = jdbc.sql("SELECT id FROM app_user WHERE email = 'priya@annapurna.test'").query(UUID.class).single();
-        String created = mvc.perform(post("/api/projects/" + projectId + "/handovers").header("Authorization", neha)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"departingUserId\":\"" + priya + "\",\"title\":\"Priya's handover\",\"scenario\":\"PLANNED\"}"))
-                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-        handoverId = JsonPath.read(created, "$.id");
-        assertThat((String) JsonPath.read(created, "$.status")).isEqualTo("DRAFT");
-        reconstruct();
+        demo = new DemoFixture(mvc, jdbc, demoPassword).createProject("Annapurna (reconstruct test)").loadSourcesAndReconstruct();
+        neha = demo.login("neha@annapurna.test");
+        handoverId = demo.handoverId;
     }
 
     private void reconstruct() throws Exception {
-        String started = mvc.perform(post("/api/handovers/" + handoverId + "/reconstruct").header("Authorization", neha))
-                .andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();
-        assertThat(awaitJob(neha, JsonPath.read(started, "$.jobId"))).isEqualTo("SUCCEEDED");
+        demo.reconstruct();
     }
 
     @Test
@@ -189,46 +157,11 @@ class ReconstructApiTest {
         assertThat((String) JsonPath.read(getJson(neha, "/api/handovers/" + handoverId), "$.status")).isEqualTo("IN_REVIEW");
     }
 
-    // ───────────── helpers ─────────────
-
     private String login(String email) throws Exception {
-        String body = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + email + "\",\"password\":\"" + demoPassword + "\"}"))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        return "Bearer " + JsonPath.read(body, "$.token");
+        return demo.login(email);
     }
 
     private String getJson(String token, String url) throws Exception {
-        return mvc.perform(get(url).header("Authorization", token)).andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-    }
-
-    private String upload(String type, String title, String sensitivity, String groups, String file) throws Exception {
-        byte[] bytes = Files.readAllBytes(Path.of("demo", "annapurna", file));
-        var req = multipart("/api/projects/" + projectId + "/sources")
-                .file(new MockMultipartFile("file", file, "application/octet-stream", bytes));
-        req.header("Authorization", neha);
-        req.param("type", type).param("title", title).param("sensitivity", sensitivity)
-                .param("authorisationAttested", "true");
-        if (groups != null) {
-            req.param("aclGroups", groups);
-        }
-        String body = mvc.perform(req).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();
-        return JsonPath.read(body, "$.jobId");
-    }
-
-    private String awaitJob(String token, String jobId) throws Exception {
-        for (int i = 0; i < 300; i++) {
-            String body = getJson(token, "/api/jobs/" + jobId);
-            String st = JsonPath.read(body, "$.status");
-            if (st.equals("SUCCEEDED") || st.equals("FAILED")) {
-                if (st.equals("FAILED")) {
-                    System.err.println("Job failed: " + body);
-                }
-                return st;
-            }
-            Thread.sleep(200);
-        }
-        throw new AssertionError("Job did not finish");
+        return demo.getJson(token, url);
     }
 }

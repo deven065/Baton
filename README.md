@@ -75,7 +75,21 @@ conflicts and writes the exit questions.
 | GET | `/api/claims/{id}` | 404 if any cited chunk is hidden from you |
 | GET | `/api/handovers/{id}/gaps` | Exit-interview questions |
 | GET | `/api/handovers/{id}/timeline` · `/api/handovers/{id}/summary` | Decisions over time; counts |
+| PATCH | `/api/claims/{id}` | Lead: `{version, reviewState?, title?, body?, attributes?, critical?, reason?}`; 409 `CLAIM_STALE` / `INVALID_TRANSITION` |
+| GET | `/api/claims/{id}/revisions` | Before/after history with actor and reason |
+| POST | `/api/claims/{id}/resolve-conflict` | Lead: `{otherClaimId, reason}`; this claim wins, the other is superseded |
+| POST | `/api/handovers/{id}/claims` | Lead adds a claim; every quote is verified against the chunk |
+| POST | `/api/gaps/{id}/answer` | Departing member: `{answer, sensitivity?, owner?}` → testimony evidence, re-score |
+| POST | `/api/gaps/{id}/skip` | `{reason?}` |
+| GET | `/api/handovers/{id}/preview?as={userId}` | Lead: "view as" a recipient |
 | GET | `/actuator/health` | Public |
+
+### Review (M4)
+Claim review states follow LLD L3: `PENDING → ACCEPTED | REJECTED | NEEDS_INFO | EDITED`, `REJECTED → PENDING`,
+`NEEDS_INFO → PENDING` (when the leaver answers), `ACCEPTED → EDITED`, `EDITED → ACCEPTED`. Any content edit makes a
+claim `EDITED`. Needs-info sends the lead's question to the leaver's exit interview. Answers are redacted, refused if they
+contain keys or passwords, stored as `TESTIMONY` at least as sensitive as the claims they discuss, cited exactly, and
+the handover is re-scored in the same transaction. Editing an approved handover reopens it for review.
 
 ### Reconstruction pipeline (Flow B)
 `SIGNAL` (task board and GitHub, no AI) → `EXTRACT` (redacted chunks in `<chunk>` tags, batched per access class) →

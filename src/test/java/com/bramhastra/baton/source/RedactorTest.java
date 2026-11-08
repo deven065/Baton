@@ -4,11 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-class RedactorTest {
+public class RedactorTest {
 
     private final Redactor redactor = new Redactor();
 
-    static final String FAKE_GROQ_KEY = "gsk_" + "FAKEplantedKEY1234567890abcdefXYZ";
+    public static final String FAKE_GROQ_KEY = "gsk_" + "FAKEplantedKEY1234567890abcdefXYZ";
     static final String FAKE_AWS_KEY = "AKIA" + "ABCDEFGHIJKLMNOP";
 
     @Test
