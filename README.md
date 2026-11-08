@@ -121,5 +121,5 @@ Demonstrations use synthetic data only. No real club or company messages are upl
 
 ## AI disclosure
 
-Claude (Anthropic) is used for code generation from our specification. Groq-hosted models run inside the product
-at runtime on redacted text only.
+AI coding assistants were used to generate parts of the code from our own specification; the team designed,
+reviewed and tested it. Groq-hosted models run inside the product at runtime on redacted text only.
