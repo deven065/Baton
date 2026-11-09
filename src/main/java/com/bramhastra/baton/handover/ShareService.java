@@ -20,7 +20,10 @@ import com.bramhastra.baton.common.Sensitivity;
 import com.bramhastra.baton.identity.AppUser;
 import com.bramhastra.baton.identity.AppUserRepository;
 import com.bramhastra.baton.security.AccessPolicy;
+import com.bramhastra.baton.mail.Mailer;
 import com.bramhastra.baton.security.CurrentUser;
+import com.bramhastra.baton.tenant.Tenant;
+import com.bramhastra.baton.tenant.TenantContext;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -44,9 +47,11 @@ public class ShareService {
     private final AccessPolicy policy;
     private final AuditService audit;
     private final ObjectMapper json;
+    private final Mailer mailer;
 
     public ShareService(JdbcClient jdbc, HandoverAccess access, HandoverRepository handovers, AppUserRepository users,
-                        AccessPolicy policy, AuditService audit, ObjectMapper json) {
+                        AccessPolicy policy, AuditService audit, ObjectMapper json, Mailer mailer) {
+        this.mailer = mailer;
         this.jdbc = jdbc;
         this.access = access;
         this.handovers = handovers;
@@ -103,6 +108,21 @@ public class ShareService {
         }
         audit.record(me.id(), "SHARE_CREATED", "handover_share", id, h.projectId(),
                 Map.of("recipient", r.getId().toString(), "version", h.currentVersionNo()));
+        Tenant t = TenantContext.require();
+        // The email names the handover and who shared it, nothing from inside it.
+        mailer.send(r.getEmail(), me.displayName() + " shared a handover with you on Baton", """
+                Hi %s,
+
+                %s shared "%s" with you as %s. It is what you need to pick up the work: where things stand,
+                who to ask, and a checklist for your first days.
+
+                Open it here (sign in to the %s workspace): %s
+
+                The share expires on %s.
+                """.formatted(r.getDisplayName(), me.displayName(), h.title(),
+                roleLabel == null || roleLabel.isBlank() ? "Successor" : roleLabel.strip(), t.slug(),
+                mailer.link("/login?ws=" + t.slug() + "&next=/handover"),
+                java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy").withZone(java.time.ZoneOffset.UTC).format(exp)));
         return list(me, handoverId).stream().filter(s -> s.id().equals(id)).findFirst().orElseThrow();
     }
 

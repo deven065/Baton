@@ -1,4 +1,4 @@
-import { AlertTriangle, Copy, KeyRound, Layers, Plus, Trash2, UserPlus, Users, X } from 'lucide-react';
+import { AlertTriangle, Check, Copy, KeyRound, Layers, Plus, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Chip, FilterChip, SensitivityChip } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import {
   useDeleteGroup, useDirectory, useGroups, useResetPassword, useTeam, useTeamMutations, useUpdateUser,
   type AdminUserDto, type SensitivityDto,
 } from '@/data/live';
+import { useSearchParams } from 'react-router-dom';
 import { useSession } from '@/lib/auth';
 import { ApiError } from '@/lib/http';
 import { cn } from '@/lib/utils';
@@ -50,11 +51,12 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 /** A one-time secret: shown once, with copy, never shown again. */
-function TempPassword({ who, value, onDone }: { who: string; value: string; onDone: () => void }) {
+function TempPassword({ who, value, onDone, emailed }: { who: string; value: string; onDone: () => void; emailed?: boolean }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex flex-col gap-4">
-      <Banner tone="inferred" icon={KeyRound}>Give {who} this temporary password privately. It is shown only now; they must change it when they first sign in.</Banner>
+      {emailed && <Banner tone="verified" icon={Check}>We emailed {who} a link to choose their own password (valid for 3 days). The temporary password below also works.</Banner>}
+      <Banner tone="inferred" icon={KeyRound}>{emailed ? 'If the email doesn’t arrive, give' : 'Give'} {who} this temporary password privately. It is shown only now; they must change it when they first sign in.</Banner>
       <div className="flex items-center gap-2 rounded-lg border border-line-strong bg-canvas px-3 py-2.5">
         <code className="flex-1 font-mono text-body tracking-wide">{value}</code>
         <Button onClick={async () => { try { await navigator.clipboard.writeText(value); setCopied(true); } catch { /* clipboard blocked */ } }}>
@@ -85,7 +87,7 @@ function AddPersonModal({ onClose }: { onClose: () => void }) {
   const [role, setRole] = useState<'Member' | 'Admin'>('Member');
   const [level, setLevel] = useState<Level>('Internal');
   const [groups, setGroups] = useState<string[]>([]);
-  if (create.data) return <Modal title="Person added" onClose={onClose}><TempPassword who={create.data.user.displayName} value={create.data.temporaryPassword} onDone={onClose} /></Modal>;
+  if (create.data) return <Modal title="Person added" onClose={onClose}><TempPassword who={create.data.user.displayName} value={create.data.temporaryPassword} emailed={create.data.invitedByEmail} onDone={onClose} /></Modal>;
   const submit = (e: FormEvent) => {
     e.preventDefault();
     create.mutate({ displayName: name.trim(), email: email.trim(), orgRole: role === 'Admin' ? 'ADMIN' : 'MEMBER', clearance: toDto(level), groups });
@@ -186,6 +188,9 @@ export function UsersGroups() {
   const { data: groups = [] } = useGroups();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<AdminUserDto | null>(null);
+  const [params, setParams] = useSearchParams();
+  const q = (params.get('q') ?? '').trim().toLowerCase();
+  const shown = q ? users.filter(u => u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)) : users;
   return (
     <>
       <PageHeader title="People & groups" sub="Clearance and groups decide what each person can see. Every change is recorded in the audit log." right={tab === 'People' && <Button kind="primary" onClick={() => setAdding(true)}><UserPlus className="size-4" aria-hidden />Add person</Button>} />
@@ -199,8 +204,9 @@ export function UsersGroups() {
       {tab === 'Groups' ? <GroupsTab /> : (
         <>
           <QueryState loading={isLoading} error={error} />
+          {q && <button type="button" onClick={() => setParams({})} className="flex items-center gap-1 self-start rounded-full bg-brand-50 px-3 py-1 text-small font-medium text-brand-700 cursor-pointer">Matching “{params.get('q')}” · {shown.length}<X className="size-3.5" aria-label="Clear search" /></button>}
           <Table label="People" columns={[{ label: 'Name' }, { label: 'Role' }, { label: 'Clearance' }, { label: 'Groups' }, { label: 'Status' }]}>
-            {users.map(u => (
+            {shown.map(u => (
               <tr key={u.id} className="cursor-pointer hover:bg-canvas" onClick={() => setEditing(u)}>
                 <Td><span className="flex items-center gap-2.5"><Avatar initials={initials(u.displayName)} tone={toneOf(u.id)} size="sm" /><span><span className="block font-medium text-ink-900">{u.displayName}</span><span className="block text-caption text-ink-500">{u.email}</span></span></span></Td>
                 <Td>{u.orgRole === 'ADMIN' ? 'Admin' : 'Member'}</Td>

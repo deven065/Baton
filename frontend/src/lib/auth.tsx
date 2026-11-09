@@ -28,7 +28,7 @@ interface Auth {
   /** Shortcut used by most screens. */
   user: Person | null;
   loading: boolean;
-  signIn: (workspace: string, email: string, password: string) => Promise<Session>;
+  signIn: (workspace: string, email: string, password: string, remember?: boolean) => Promise<Session>;
   /** Creates a company workspace on its own database and signs its first admin in. */
   register: (r: WorkspaceRegistration) => Promise<Session>;
   /** Re-reads the session (after a password change, a new handover or a membership change). */
@@ -91,10 +91,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const signIn = useCallback(async (workspace: string, email: string, password: string) => {
+  const signIn = useCallback(async (workspace: string, email: string, password: string, remember = true) => {
     const res = await api<{ token: string; user: UserDto }>('/api/auth/login', { method: 'POST', json: { workspace, email, password } });
     try { localStorage.setItem(WORKSPACE_KEY, workspace); } catch { /* private mode */ }
-    setToken(res.token);
+    setToken(res.token, remember);
     qc.clear();
     const s = await resolveSession(res.user);
     setSession(s);

@@ -2,12 +2,17 @@
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '';
 const TOKEN_KEY = 'baton.token';
 
-let token: string | null = (() => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } })();
+// "Keep me signed in" keeps the token in localStorage; otherwise it lives in sessionStorage and ends with the tab.
+let token: string | null = (() => { try { return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY); } catch { return null; } })();
 const unauthListeners = new Set<() => void>();
 
-export function setToken(t: string | null) {
+export function setToken(t: string | null, remember = true) {
   token = t;
-  try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch { /* private mode */ }
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+    if (t) (remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, t);
+  } catch { /* private mode: the token stays in memory only */ }
 }
 export const getToken = () => token;
 export function onUnauthenticated(fn: () => void) { unauthListeners.add(fn); return () => { unauthListeners.delete(fn); }; }

@@ -1,12 +1,12 @@
 import { Check, ChevronRight, Lock } from 'lucide-react';
-import { useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { SensitivityChip, StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Field, Input } from '@/components/ui/form';
 import { Avatar, Banner, Card, EvidenceQuote, Logo } from '@/components/ui/misc';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD, DEMO_WORKSPACE, HOME, lastWorkspace, useAuth } from '@/lib/auth';
-import { ApiError } from '@/lib/http';
+import { ApiError, api } from '@/lib/http';
 
 function BrandPanel({ over, title, sub, children }: { over: string; title: string; sub: string; children?: ReactNode }) {
   return (
@@ -26,7 +26,11 @@ function BrandPanel({ over, title, sub, children }: { over: string; title: strin
 export function LoginPage() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
-  const [workspace, setWorkspace] = useState(lastWorkspace);
+  const [params] = useSearchParams();
+  // Links in emails carry ?ws=acme (and ?next=/handover for a shared handover).
+  const next = params.get('next');
+  const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : null;
+  const [workspace, setWorkspace] = useState(() => params.get('ws') ?? lastWorkspace());
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
@@ -37,8 +41,8 @@ export function LoginPage() {
     setError('');
     setBusy(e);
     try {
-      const s = await signIn(ws, e, p);
-      navigate(HOME[s.role]);
+      const s = await signIn(ws, e, p, remember);
+      navigate(s.mustChangePassword ? '/change-password' : safeNext ?? HOME[s.role]);
     } catch (err) {
       setError(err instanceof ApiError && err.status === 401 ? 'That workspace, email and password don’t match an account.' : (err as Error).message);
     } finally {
@@ -73,10 +77,11 @@ export function LoginPage() {
             </Field>
             <Field label="Email">{id => <Input id={id} type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} invalid={!!error} />}</Field>
             <Field label="Password">{id => <Input id={id} type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />}</Field>
+            {params.get('reset') && !error && <p role="status" className="text-small text-verified">Password saved. Sign in with your new password.</p>}
             {error && <p role="alert" className="text-small text-conflict">{error}</p>}
             <div className="flex items-center justify-between">
               <Checkbox checked={remember} onChange={setRemember} label="Keep me signed in" />
-              <a href="#" className="text-small font-medium text-brand-600 hover:underline">Forgot password?</a>
+              <Link to={`/forgot-password${workspace.trim() ? `?ws=${encodeURIComponent(workspace.trim().toLowerCase())}` : ''}`} className="text-small font-medium text-brand-600 hover:underline">Forgot password?</Link>
             </div>
             <Button kind="primary" size="lg" type="submit" disabled={!!busy}>{busy === email.trim() ? 'Signing in…' : 'Sign in'}</Button>
           </form>
@@ -107,33 +112,126 @@ export function LoginPage() {
   );
 }
 
+/** Old invitation links: send people to sign-in, keeping the workspace and destination. */
 export function InvitePage() {
-  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  return <Navigate to={`/login?${params.toString()}`} replace />;
+}
+
+function SmallPage({ children }: { children: ReactNode }) {
   return (
-    <div className="grid min-h-dvh place-items-center px-4 py-10">
-      <Card className="flex w-full max-w-[500px] flex-col gap-5 p-8 shadow-pop">
+    <div className="grid min-h-dvh place-items-center bg-canvas px-4 py-10">
+      <Card className="flex w-full max-w-[440px] flex-col gap-5 p-8 shadow-pop">
         <Logo />
-        <div className="flex items-center gap-3">
-          <Avatar initials="PN" tone={0} size="lg" />
-          <div>
-            <h1 className="text-h2 font-semibold">Priya Nair shared a handover with you</h1>
-            <p className="text-small text-ink-500">Project Annapurna · Engineer view · link expires 20 Dec 2026</p>
-          </div>
-        </div>
-        <hr className="border-line" />
-        <p className="overline text-ink-400">What you’ll get</p>
-        <ul className="flex flex-col gap-3">
-          {['Start here: goal, current phase, next deadline, top risks', 'A Day 1 / Week 1 / Month 1 checklist', 'Who to ask about what — the ownership map', 'Every statement linked to its source'].map(s => (
-            <li key={s} className="flex items-center gap-2.5 text-ink-700">
-              <span className="grid size-[18px] place-items-center rounded-full bg-verified text-white"><Check className="size-2.5" strokeWidth={3} aria-hidden /></span>{s}
-            </li>
-          ))}
-        </ul>
-        <Banner icon={Lock}>You’ll see claims up to Confidential in the engineering group. Anything above that stays hidden — filtering happens in the database.</Banner>
-        <Field label="Signed in as">{id => <Input id={id} readOnly value="rohan.k@northfield.club" />}</Field>
-        <Button kind="primary" size="lg" onClick={() => navigate('/login')}>Sign in to open</Button>
-        <p className="text-center text-caption text-ink-500">This link is personal. Every view is recorded in the audit log for the project lead.</p>
+        {children}
       </Card>
     </div>
+  );
+}
+
+/** "Forgot password": emails a one-time link when email is set up on this server; otherwise, ask an admin. */
+export function ForgotPasswordPage() {
+  const [params] = useSearchParams();
+  const [workspace, setWorkspace] = useState(() => params.get('ws') ?? lastWorkspace());
+  const [email, setEmail] = useState('');
+  const [state, setState] = useState<'idle' | 'busy' | 'sent'>('idle');
+  const [error, setError] = useState('');
+  const [byEmail, setByEmail] = useState<boolean | null>(null);
+  useEffect(() => {
+    api<{ passwordResetByEmail: boolean }>('/api/auth/options').then(o => setByEmail(o.passwordResetByEmail)).catch(() => setByEmail(false));
+  }, []);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!workspace.trim() || !email.trim()) { setError('Enter your workspace and email.'); return; }
+    setError('');
+    setState('busy');
+    try {
+      await api('/api/auth/forgot-password', { method: 'POST', json: { workspace: workspace.trim().toLowerCase(), email: email.trim() } });
+      setState('sent');
+    } catch (err) {
+      setError((err as Error).message);
+      setState('idle');
+    }
+  };
+
+  return (
+    <SmallPage>
+      <h1 className="text-h2 font-semibold">Reset your password</h1>
+      {byEmail === false && (
+        <>
+          <Banner icon={Lock}>Ask an admin of your workspace to reset it. In Baton they open <strong>Organisation → People &amp; groups</strong>, choose you and click <strong>Reset password</strong>; you then pick a new one when you sign in.</Banner>
+          <Link to="/login" className="text-small font-medium text-brand-600 hover:underline">Back to sign-in</Link>
+        </>
+      )}
+      {byEmail && state === 'sent' && (
+        <>
+          <Banner tone="verified" icon={Check}>If <strong>{email.trim()}</strong> has an account in <strong>{workspace.trim()}</strong>, we’ve emailed it a link. It works once, for 30 minutes.</Banner>
+          <Link to={`/login?ws=${encodeURIComponent(workspace.trim().toLowerCase())}`} className="text-small font-medium text-brand-600 hover:underline">Back to sign-in</Link>
+        </>
+      )}
+      {byEmail && state !== 'sent' && (
+        <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+          <p className="text-small text-ink-500">We’ll email you a link to choose a new password.</p>
+          <Field label="Workspace">{id => <Input id={id} value={workspace} onChange={e => setWorkspace(e.target.value)} autoCapitalize="none" spellCheck={false} placeholder="acme" />}</Field>
+          <Field label="Email">{id => <Input id={id} type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} autoFocus />}</Field>
+          {error && <p role="alert" className="text-small text-conflict">{error}</p>}
+          <Button kind="primary" size="lg" type="submit" disabled={state === 'busy'}>{state === 'busy' ? 'Sending…' : 'Email me a link'}</Button>
+          <Link to="/login" className="text-center text-small text-ink-500 hover:underline">Back to sign-in</Link>
+        </form>
+      )}
+    </SmallPage>
+  );
+}
+
+/** Opened from the emailed link: /reset-password?ws=acme&token=… */
+export function ResetPasswordPage() {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const ws = params.get('ws') ?? '';
+  const token = params.get('token') ?? '';
+  const [pw, setPw] = useState('');
+  const [again, setAgain] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (pw.length < 12) { setError('Use at least 12 characters.'); return; }
+    if (pw !== again) { setError('The two passwords don’t match.'); return; }
+    setError('');
+    setBusy(true);
+    try {
+      await api('/api/auth/reset-password', { method: 'POST', json: { workspace: ws, token, newPassword: pw } });
+      navigate(`/login?ws=${encodeURIComponent(ws)}&reset=1`, { replace: true });
+    } catch (err) {
+      const d = err instanceof ApiError ? (err.details as Record<string, string> | undefined) : undefined;
+      setError(d?.token ?? d?.newPassword ?? (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!ws || !token) {
+    return (
+      <SmallPage>
+        <h1 className="text-h2 font-semibold">This link is incomplete</h1>
+        <p className="text-small text-ink-500">Open the link from your email again, or <Link to="/forgot-password" className="font-medium text-brand-600 underline">ask for a new one</Link>.</p>
+      </SmallPage>
+    );
+  }
+  return (
+    <SmallPage>
+      <div>
+        <h1 className="text-h2 font-semibold">Choose a new password</h1>
+        <p className="mt-1 text-small text-ink-500">For the <span className="font-mono">{ws}</span> workspace.</p>
+      </div>
+      <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+        <Field label="New password" hint={<p className="text-caption text-ink-500">At least 12 characters.</p>}>{id => <Input id={id} type="password" autoComplete="new-password" value={pw} onChange={e => setPw(e.target.value)} autoFocus />}</Field>
+        <Field label="Type it again">{id => <Input id={id} type="password" autoComplete="new-password" value={again} onChange={e => setAgain(e.target.value)} />}</Field>
+        {error && <p role="alert" className="text-small text-conflict">{error}</p>}
+        <Button kind="primary" size="lg" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save and sign in'}</Button>
+      </form>
+    </SmallPage>
   );
 }

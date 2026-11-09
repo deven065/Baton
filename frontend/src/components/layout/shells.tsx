@@ -3,10 +3,10 @@ import {
   AlertTriangle, FolderKanban, UsersRound, Bell, CheckSquare, ChevronDown, ChevronRight, Clock, Eye, FileText, Home, Layers, LogOut, Menu, Plug, Search, Share2, ShieldCheck, Users, X,
   type LucideIcon,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { SensitivityChip } from '@/components/ui/badge';
-import { fmtDate, useSummary } from '@/data/live';
+import { fmtDate, fmtDateTime, useGapList, useShares, useSummary } from '@/data/live';
 import { useCurrentShare } from '@/pages/recipient/RecipientPages';
 import { Avatar, Kbd, Logo } from '@/components/ui/misc';
 import { useAuth } from '@/lib/auth';
@@ -113,6 +113,89 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+/** Header search: claims for a lead (opens Review filtered), people for an admin. Press / to focus. */
+function HeaderSearch() {
+  const { session } = useAuth();
+  const navigate = useNavigate();
+  const ref = useRef<HTMLInputElement>(null);
+  const [q, setQ] = useState('');
+  const target = session?.role === 'lead' ? '/app/review' : session?.isAdmin ? '/app/admin/users' : null;
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.key === '/' && !(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable))) {
+        e.preventDefault();
+        ref.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, []);
+  if (!target) return null;
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    navigate(q.trim() ? `${target}?q=${encodeURIComponent(q.trim())}` : target);
+  };
+  return (
+    <form role="search" onSubmit={submit} className="hidden w-[300px] items-center gap-2 rounded-lg border border-line bg-canvas px-3 py-2 md:flex">
+      <Search className="size-4 text-ink-400" aria-hidden />
+      <input ref={ref} value={q} onChange={e => setQ(e.target.value)} placeholder={target === '/app/review' ? 'Search claims' : 'Search people'} aria-label="Search" className="w-full bg-transparent text-small outline-none placeholder:text-ink-400" />
+      <Kbd>/</Kbd>
+    </form>
+  );
+}
+
+const SEEN_KEY = 'baton.notificationsSeen';
+
+/** What happened on the lead's handover lately: exit answers, and recipients opening or acknowledging it. */
+function Notifications() {
+  const { session } = useAuth();
+  const h = session?.role === 'lead' ? session.handover : null;
+  const { data: gaps = [] } = useGapList(h?.id);
+  const { data: shares = [] } = useShares(h?.id);
+  const [open, setOpen] = useState(false);
+  const [seen, setSeen] = useState(() => { try { return Number(localStorage.getItem(SEEN_KEY) ?? 0); } catch { return 0; } });
+  const items = [
+    ...gaps.filter(g => g.answeredAt && g.status === 'ANSWERED').map(g => ({ at: g.answeredAt!, text: `${h?.departingName ?? 'The person leaving'} answered: ${g.question.length > 90 ? g.question.slice(0, 90) + '…' : g.question}`, to: '/app/review' })),
+    ...shares.filter(s => s.acknowledgedAt).map(s => ({ at: s.acknowledgedAt!, text: `${s.recipientName} acknowledged handover v${s.versionNo}`, to: '/app/share' })),
+    ...shares.filter(s => s.lastViewedAt && !s.acknowledgedAt).map(s => ({ at: s.lastViewedAt!, text: `${s.recipientName} opened handover v${s.versionNo}`, to: '/app/share' })),
+  ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8);
+  const unread = items.filter(i => new Date(i.at).getTime() > seen).length;
+  const toggle = () => {
+    setOpen(o => !o);
+    const now = Date.now();
+    setSeen(now);
+    try { localStorage.setItem(SEEN_KEY, String(now)); } catch { /* private mode */ }
+  };
+  return (
+    <div className="relative">
+      <button type="button" aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'} aria-expanded={open} onClick={toggle} className="relative rounded-lg border border-line p-2 text-ink-700 hover:bg-canvas cursor-pointer">
+        <Bell className="size-4" />
+        {unread > 0 && <span className="absolute -top-1 -right-1 grid min-w-4 place-items-center rounded-full bg-conflict px-1 text-[10px] font-semibold text-white">{unread}</span>}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-50 mt-2 w-[340px] overflow-hidden rounded-xl border border-line bg-card shadow-pop">
+            <p className="border-b border-line px-4 py-2.5 text-small font-semibold">Notifications</p>
+            <ul className="max-h-[360px] overflow-y-auto">
+              {items.map(i => (
+                <li key={i.at + i.text}>
+                  <Link to={i.to} onClick={() => setOpen(false)} className="flex flex-col gap-0.5 px-4 py-2.5 hover:bg-canvas">
+                    <span className="text-small text-ink-900">{i.text}</span>
+                    <span className="text-caption text-ink-400">{fmtDateTime(i.at)}</span>
+                  </Link>
+                </li>
+              ))}
+              {items.length === 0 && <li className="px-4 py-4 text-small text-ink-500">{h ? 'Nothing new yet. Exit answers and recipients opening the handover show up here.' : 'Nothing here yet.'}</li>}
+            </ul>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function AppShell() {
   const { user, session } = useAuth();
   const { pathname } = useLocation();
@@ -148,12 +231,8 @@ export function AppShell() {
             </nav>
           </div>
           <div className="flex items-center gap-3">
-            <label className="hidden w-[300px] items-center gap-2 rounded-lg border border-line bg-canvas px-3 py-2 md:flex">
-              <Search className="size-4 text-ink-400" aria-hidden />
-              <input placeholder="Search claims, sources, people" aria-label="Search" className="w-full bg-transparent text-small outline-none placeholder:text-ink-400" />
-              <Kbd>/</Kbd>
-            </label>
-            <button type="button" aria-label="Notifications" className="rounded-lg border border-line p-2 text-ink-700 hover:bg-canvas cursor-pointer"><Bell className="size-4" /></button>
+            <HeaderSearch />
+            <Notifications />
             {user && <Avatar initials={user.initials} tone={user.tone} />}
           </div>
         </header>

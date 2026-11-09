@@ -25,6 +25,7 @@ import com.bramhastra.baton.common.Sensitivity;
 import com.bramhastra.baton.identity.AppUser;
 import com.bramhastra.baton.identity.AppUserRepository;
 import com.bramhastra.baton.identity.OrgRole;
+import com.bramhastra.baton.identity.PasswordResetService;
 import com.bramhastra.baton.identity.UserGroup;
 import com.bramhastra.baton.identity.UserGroupRepository;
 import com.bramhastra.baton.security.CurrentUser;
@@ -45,15 +46,17 @@ public class AdminService {
     private final PasswordEncoder passwords;
     private final AuditService audit;
     private final JdbcClient jdbc;
+    private final PasswordResetService resets;
     private final SecureRandom random = new SecureRandom();
 
     public AdminService(AppUserRepository users, UserGroupRepository groups, PasswordEncoder passwords,
-                        AuditService audit, JdbcClient jdbc) {
+                        AuditService audit, JdbcClient jdbc, PasswordResetService resets) {
         this.users = users;
         this.groups = groups;
         this.passwords = passwords;
         this.audit = audit;
         this.jdbc = jdbc;
+        this.resets = resets;
     }
 
     public static void requireAdmin(CurrentUser me) {
@@ -76,7 +79,7 @@ public class AdminService {
     public record NewUser(String displayName, String email, OrgRole orgRole, Sensitivity clearance, List<String> groups) {
     }
 
-    public record Created(UserView user, String temporaryPassword) {
+    public record Created(UserView user, String temporaryPassword, boolean invitedByEmail) {
     }
 
     public record UserPatch(String displayName, OrgRole orgRole, Sensitivity clearance, List<String> groups, Boolean active) {
@@ -107,7 +110,9 @@ public class AdminService {
         u = users.saveAndFlush(u);
         audit.record(me.id(), "USER_CREATED", "app_user", u.getId(), null,
                 Map.of("orgRole", u.getOrgRole().name(), "clearance", u.getClearance().name(), "groups", names(u)));
-        return new Created(UserView.of(u), temp);
+        // With email set up, they also get a link to choose their own password (the temporary one still works).
+        resets.invite(u, me.displayName());
+        return new Created(UserView.of(u), temp, resets.emailEnabled());
     }
 
     @Transactional

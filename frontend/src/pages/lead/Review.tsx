@@ -1,6 +1,6 @@
 import { AlertTriangle, Check, Keyboard, Layers, Lock, ShieldAlert, Star, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { FilterChip, SensitivityChip, StatusBadge, statusDot } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/form';
@@ -44,7 +44,11 @@ export default function Review() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
 
-  const visible = useMemo(() => claims.filter(c => matches(c, filter, type)), [claims, filter, type]);
+  // ?q= comes from the header search box.
+  const [params, setParams] = useSearchParams();
+  const q = (params.get('q') ?? '').trim().toLowerCase();
+  const visible = useMemo(() => claims.filter(c => matches(c, filter, type)
+    && (!q || [c.title, c.body, c.subject, typeLabel(c.type)].some(v => v?.toLowerCase().includes(q)))), [claims, filter, type, q]);
   const selId = selectedId ?? visible[0]?.id ?? null;
   const detail = useClaim(selId);
   const revisions = useRevisions(selId);
@@ -97,6 +101,7 @@ export default function Review() {
       </div>
       <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Filter claims">
         {FILTERS.map(f => <FilterChip key={f.key} active={filter === f.key} onClick={() => setFilter(f.key)}>{f.label} {count(f.key)}</FilterChip>)}
+        {q && <button type="button" onClick={() => setParams({})} className="flex items-center gap-1 rounded-full bg-brand-50 px-3 py-1 text-small font-medium text-brand-700 cursor-pointer">Matching “{params.get('q')}” · {visible.length}<X className="size-3.5" aria-label="Clear search" /></button>}
       </div>
       <QueryState loading={list.isLoading} error={list.error} empty={!list.isLoading && claims.length === 0} emptyText="No claims yet. Run reconstruction first." />
 

@@ -246,7 +246,7 @@ export function useCreateUser() {
   const inv = useInvalidate(qa.users, ['admin', 'audit'], qa.directory);
   return useMutation({
     mutationFn: (p: { displayName: string; email: string; orgRole: 'ADMIN' | 'MEMBER'; clearance: SensitivityDto; groups: string[] }) =>
-      api<{ user: AdminUserDto; temporaryPassword: string }>('/api/admin/users', { method: 'POST', json: p }),
+      api<{ user: AdminUserDto; temporaryPassword: string; invitedByEmail: boolean }>('/api/admin/users', { method: 'POST', json: p }),
     onSuccess: inv,
   });
 }

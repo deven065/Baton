@@ -50,6 +50,8 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/options").permitAll()
                         // Workspace sign-up and the sign-in page's "does this workspace exist" lookup.
                         .requestMatchers(HttpMethod.POST, "/api/workspaces").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/workspaces/*").permitAll()

@@ -5,7 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell, RecipientShell } from '@/components/layout/shells';
 import { AuthProvider, HOME, useAuth } from '@/lib/auth';
 import type { Role } from '@/data/types';
-import { InvitePage, LoginPage } from '@/pages/auth/AuthPages';
+import { ForgotPasswordPage, InvitePage, LoginPage, ResetPasswordPage } from '@/pages/auth/AuthPages';
 import { ChangePasswordPage, SignupWizard } from '@/pages/auth/Onboarding';
 import Dashboard from '@/pages/lead/Dashboard';
 import Sources from '@/pages/lead/Sources';
@@ -59,6 +59,8 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupWizard />} />
             <Route path="/connect-database" element={<DatabaseGuide />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/disconnected" element={<DisconnectedPage />} />
             <Route path="/change-password" element={<ChangePasswordPage />} />
             <Route path="/invite" element={<InvitePage />} />
