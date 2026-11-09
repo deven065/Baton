@@ -1,5 +1,7 @@
 package com.bramhastra.baton.tenant;
 
+import com.bramhastra.baton.common.SafeLog;
+
 import javax.sql.DataSource;
 
 import org.flywaydb.core.Flyway;
@@ -49,7 +51,7 @@ public class TenantBootstrap implements SmartInitializingSingleton {
                 activity.touch(t.id());
             } catch (RuntimeException e) {
                 // One company's database being unreachable must not stop Baton for everyone else.
-                log.warn("Workspace '{}' could not be migrated: {}", t.slug(), e.getMessage());
+                log.warn("Workspace '{}' could not be migrated: {}", t.slug(), SafeLog.describe(e));
             }
         }
         log.info("Workspaces ready: {}", registry.active().size());

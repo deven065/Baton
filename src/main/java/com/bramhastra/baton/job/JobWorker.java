@@ -1,5 +1,7 @@
 package com.bramhastra.baton.job;
 
+import com.bramhastra.baton.common.SafeLog;
+
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -83,7 +85,7 @@ public class JobWorker {
             } catch (RuntimeException e) {
                 slots.release();
                 // One company's database being down must not stop the others' jobs.
-                log.warn("Could not claim job in workspace '{}': {}", tenant.slug(), e.getMessage());
+                log.warn("Could not claim job in workspace '{}': {}", tenant.slug(), SafeLog.describe(e));
                 return true;
             }
             if (next.isEmpty()) {
@@ -123,7 +125,7 @@ public class JobWorker {
             sse.publish(job.id(), done);
             sse.finish(job.id(), "SUCCEEDED");
         } catch (Exception e) {
-            log.warn("Job {} ({}) failed: {}", job.id(), job.kind(), e.toString());
+            log.warn("Job {} ({}) failed: {}", job.id(), job.kind(), SafeLog.describe(e));
             String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             JobProgress failed = new JobProgress(last[0].stage(), last[0].percent(), "Failed: " + message,
                     last[0].counts());
@@ -141,7 +143,7 @@ public class JobWorker {
             try {
                 TenantContext.run(t, () -> jobs.heartbeat(Set.copyOf(ids)));
             } catch (RuntimeException e) {
-                log.warn("Heartbeat failed in workspace '{}': {}", t.slug(), e.getMessage());
+                log.warn("Heartbeat failed in workspace '{}': {}", t.slug(), SafeLog.describe(e));
             }
         });
     }
@@ -155,7 +157,7 @@ public class JobWorker {
                     log.info("Requeued or failed {} stuck job(s) in workspace '{}'", n, t.slug());
                 }
             } catch (RuntimeException e) {
-                log.warn("Reaping failed in workspace '{}': {}", t.slug(), e.getMessage());
+                log.warn("Reaping failed in workspace '{}': {}", t.slug(), SafeLog.describe(e));
             }
         }
     }

@@ -1,5 +1,7 @@
 package com.bramhastra.baton.tenant;
 
+import com.bramhastra.baton.common.SafeLog;
+
 import java.security.SecureRandom;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -165,6 +167,31 @@ public class TenantRegistry {
         return byId(id).orElseThrow();
     }
 
+    /** Where a company workspace's database is (host, port, database name), for its admins. Null for the demo. */
+    public DatabaseUrl connection(Tenant t) {
+        if (t.usesHomeDb()) {
+            return null;
+        }
+        Map<String, Object> row = control.sql("""
+                SELECT db_url_sealed, db_user_sealed, db_password_sealed FROM control.tenant WHERE id = :id
+                """).param("id", t.id()).query().singleRow();
+        return DatabaseUrl.parse(master.open((String) row.get("db_url_sealed")),
+                master.open((String) row.get("db_user_sealed")), master.open((String) row.get("db_password_sealed")));
+    }
+
+    /** The workspace's raw data key, handed to its admin once when they disconnect. */
+    public byte[] exportDataKey(Tenant t) {
+        return dataKey(t).getEncoded();
+    }
+
+    /**
+     * Disconnects a company: deletes everything Baton holds about it (its sealed connection details and data key)
+     * and closes its pool. The company's own database is not touched.
+     */
+    public void disconnect(UUID id) {
+        forget(id);
+    }
+
     /** Removes a half-created workspace (registration failed after the row was written). */
     public void forget(UUID id) {
         control.sql("DELETE FROM control.tenant WHERE id = :id").param("id", id).update();
@@ -182,7 +209,7 @@ public class TenantRegistry {
             try {
                 ds.close();
             } catch (RuntimeException e) {
-                log.debug("Closing pool failed: {}", e.getMessage());
+                log.debug("Closing pool failed: {}", SafeLog.describe(e));
             }
         });
     }

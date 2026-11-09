@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -22,8 +24,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ApiError> api(ApiException e) {
-        return ResponseEntity.status(e.code().status())
-                .body(new ApiError(e.code().name(), e.getMessage(), e.details()));
+        ResponseEntity.BodyBuilder res = ResponseEntity.status(e.code().status());
+        if (e.details() instanceof Map<?, ?> d && d.get("retryAfterSeconds") instanceof Number n) {
+            res.header("Retry-After", String.valueOf(n.longValue()));
+        }
+        return res.body(new ApiError(e.code().name(), e.getMessage(), e.details()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -60,9 +65,12 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    ResponseEntity<ApiError> unexpected(Exception e) {
-        log.error("Unhandled error", e);
-        return body(ErrorCode.INTERNAL_ERROR, "Unexpected error", null);
+    ResponseEntity<ApiError> unexpected(Exception e, HttpServletRequest request) {
+        // Never log the message or stack trace text: they can contain company content. The ref lets a user
+        // report the error and lets us find this line.
+        String ref = Long.toHexString(Double.doubleToLongBits(Math.random())).substring(0, 8);
+        log.error("Unhandled error ref={} {} {}: {}", ref, request.getMethod(), request.getRequestURI(), SafeLog.describe(e));
+        return body(ErrorCode.INTERNAL_ERROR, "Unexpected error (ref " + ref + ")", Map.of("ref", ref));
     }
 
     private static ResponseEntity<ApiError> body(ErrorCode code, String message, Object details) {

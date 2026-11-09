@@ -1,5 +1,7 @@
 package com.bramhastra.baton.reconstruct.stage;
 
+import com.bramhastra.baton.common.SafeLog;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -103,7 +105,7 @@ public class ExtractStage implements PipelineStage {
                 ctx.count("extracted", n);
             } catch (LlmClient.LlmUnavailableException | LlmClient.LlmClientError | BadOutput e) {
                 failed++;
-                log.warn("Batch {} failed: {}", b + 1, e.getMessage());
+                log.warn("Batch {} failed: {}", b + 1, SafeLog.describe(e));
             }
         }
         if (failed > 0) {

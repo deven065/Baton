@@ -143,7 +143,8 @@ export function SignupWizard() {
             <div><h1 className="text-h1 font-semibold">Connect your database</h1><p className="mt-1 text-ink-500">An <strong>empty</strong> PostgreSQL 14+ database with pgvector, in your own account.</p></div>
             <Banner icon={Database}>
               Easiest: create a free project on <a className="font-medium underline" href="https://neon.tech" target="_blank" rel="noreferrer">Neon</a> or{' '}
-              <a className="font-medium underline" href="https://supabase.com" target="_blank" rel="noreferrer">Supabase</a> and copy its connection string. Baton sets up the tables itself.
+              <a className="font-medium underline" href="https://supabase.com" target="_blank" rel="noreferrer">Supabase</a> and copy its connection string. Baton sets up the tables itself.{' '}
+              <Link to="/connect-database" target="_blank" className="font-medium underline">Step-by-step guide</Link>
             </Banner>
             <Field label="Connection URL" hint={<p className="text-caption text-ink-500">e.g. <span className="font-mono">postgresql://user:password@host/dbname?sslmode=require</span></p>}>
               {id => <Input id={id} autoFocus value={dbUrl} onChange={e => setDbUrl(e.target.value)} className="font-mono text-small" placeholder="postgresql://…" invalid={error?.field === 'db'} autoCapitalize="none" spellCheck={false} autoComplete="off" />}

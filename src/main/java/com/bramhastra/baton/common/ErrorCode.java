@@ -7,6 +7,8 @@ public enum ErrorCode {
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST),
     ATTESTATION_REQUIRED(HttpStatus.BAD_REQUEST),
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED),
+    /** Sign-in, sign-up or workspace lookup called too often from one address or for one account. */
+    TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS),
     FORBIDDEN_ROLE(HttpStatus.FORBIDDEN),
     SHARE_INACTIVE(HttpStatus.FORBIDDEN),
     /** Missing OR not visible. Never reveal that a hidden resource exists. */

@@ -362,3 +362,15 @@ export function useRecipientMutations(shareId?: string | null) {
   const acknowledge = useMutation({ mutationFn: () => api<{ acknowledgedAt: string }>(`/api/shares/${shareId}/acknowledge`, { method: 'POST' }), onSuccess: inv });
   return { check, acknowledge };
 }
+
+// ───────────── phase 4: workspace settings ─────────────
+
+export interface WorkspaceSettingsDto {
+  slug: string; name: string; createdAt: string; demo: boolean;
+  database: { host: string; port: number; database: string } | null; people: number; projects: number;
+}
+export const useWorkspaceSettings = () => useQuery({ queryKey: ['workspaceSettings'], queryFn: () => api<WorkspaceSettingsDto>('/api/admin/workspace') });
+export const useDisconnectWorkspace = () => useMutation({
+  mutationFn: (p: { confirm: string; password: string }) =>
+    api<{ recoveryKey: string; disconnectedAt: string }>('/api/admin/workspace/disconnect', { method: 'POST', json: p }),
+});

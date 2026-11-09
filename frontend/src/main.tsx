@@ -18,6 +18,8 @@ import { Approval, Share } from '@/pages/lead/ApprovalShare';
 import ExitInterview from '@/pages/leaver/ExitInterview';
 import { ChecklistPage, Ownership, RecipientTimeline, StartHere } from '@/pages/recipient/RecipientPages';
 import { AuditLog, ProjectsPage, TeamPage, UsersGroups } from '@/pages/admin/AdminPages';
+import { DisconnectedPage, WorkspaceSettings } from '@/pages/admin/WorkspaceSettings';
+import { DatabaseGuide } from '@/pages/public/DatabaseGuide';
 import './index.css';
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false } } });
@@ -56,6 +58,8 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupWizard />} />
+            <Route path="/connect-database" element={<DatabaseGuide />} />
+            <Route path="/disconnected" element={<DisconnectedPage />} />
             <Route path="/change-password" element={<ChangePasswordPage />} />
             <Route path="/invite" element={<InvitePage />} />
 
@@ -73,6 +77,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="admin/users" element={<RequireAdmin><UsersGroups /></RequireAdmin>} />
               <Route path="admin/projects" element={<RequireAdmin><ProjectsPage /></RequireAdmin>} />
               <Route path="admin/audit" element={<RequireAdmin><AuditLog /></RequireAdmin>} />
+              <Route path="admin/workspace" element={<RequireAdmin><WorkspaceSettings /></RequireAdmin>} />
             </Route>
 
             <Route path="/interview" element={<RequireRole roles={['leaver']}><ExitInterview /></RequireRole>} />

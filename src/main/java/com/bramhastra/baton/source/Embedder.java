@@ -1,5 +1,7 @@
 package com.bramhastra.baton.source;
 
+import com.bramhastra.baton.common.SafeLog;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -74,7 +76,7 @@ public class Embedder {
                         log.info("Loaded local MiniLM embedding model");
                     } catch (RuntimeException | LinkageError e) {
                         failed = true;
-                        log.warn("Embedding model unavailable, search will be keyword-only: {}", e.toString());
+                        log.warn("Embedding model unavailable, search will be keyword-only: {}", SafeLog.describe(e));
                     }
                 }
             }
