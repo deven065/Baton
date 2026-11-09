@@ -5,6 +5,8 @@ permission-aware handover, and turns whatever has no receipt into a question for
 
 Team Bramhastra: Deven Rikame (lead, backend) · Bhushan Shinde (database, AI prompts) · Shawn Dmello (frontend, deployment)
 
+Live: frontend on Vercel (https://baton-umber.vercel.app), API on Render. Every push to `main` deploys both.
+
 ## Run locally
 
 Requirements: JDK 21, Docker.
