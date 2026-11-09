@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, GitCommitHorizontal, Lock } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, FileCheck2, GitCommitHorizontal, GitCompare, Lock, Users } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { SensitivityChip, StatusBadge } from '@/components/ui/badge';
@@ -7,11 +7,12 @@ import { Field, Input } from '@/components/ui/form';
 import { Avatar, Banner, Card, CardHeader, PageHeader, Progress, QueryState, StatusCircle, Table, Td, WorkflowStepper } from '@/components/ui/misc';
 import type { Status } from '@/data/types';
 import {
-  fmtDate, fmtDateTime, sens, typeLabel, useApprove, useDiff, useGate, useProject, useShareMutations, useShares, useVersions,
+  fmtDate, fmtDateTime, sens, typeLabel, useApprove, useDiff, useDrift, useGate, useLiving, useProject, useShareMutations, useShares, useVersions,
+  type VerificationDto,
   type ShareRowDto,
 } from '@/data/live';
 import { useAuth, useSession } from '@/lib/auth';
-import { ApiError } from '@/lib/http';
+import { ApiError, api, download } from '@/lib/http';
 import { cn } from '@/lib/utils';
 
 const FIX: Record<string, { to: string; action: string }> = {
@@ -31,6 +32,8 @@ export function Approval() {
   const latest = versions.data?.[0];
   const diff = useDiff(handover?.id, latest?.versionNo);
   const approve = useApprove(handover?.id);
+  const drift = useDrift(handover?.id);
+  const { reopen } = useLiving(handover?.id);
   const checks = gate.data?.checks ?? [];
   const blockers = checks.filter(c => c.blocking && !c.ok).length;
   const warnings = checks.filter(c => !c.blocking && !c.ok).length;
@@ -44,6 +47,15 @@ export function Approval() {
     <>
       <WorkflowStepper current={3} />
       <PageHeader title="Approval gate" sub="Approving freezes a version with a SHA-256 hash. Recipients only ever see approved versions." />
+      <DriftBanner
+        versionNo={drift.data?.versionNo ?? null}
+        status={drift.data?.status}
+        changes={drift.data?.changes.length ?? 0}
+        answers={drift.data?.answersSince ?? 0}
+        sources={drift.data?.sourcesUpdated ?? 0}
+        busy={reopen.isPending}
+        onReopen={() => reopen.mutate(undefined, { onSuccess: () => refresh() })}
+      />
       <div className="grid items-start gap-6 xl:grid-cols-[1fr_420px]">
         <Card className="flex flex-col p-6">
           <CardHeader
@@ -83,6 +95,7 @@ export function Approval() {
               </div>
             ))}
             {versions.data?.length === 0 && <p className="text-small text-ink-500">Nothing approved yet.</p>}
+            {!!versions.data?.length && <ExportTools handoverId={handover.id} versions={versions.data.map(v => v.versionNo)} />}
           </Card>
           {latest && (
             <Card className="flex flex-col gap-2">
@@ -116,6 +129,8 @@ export function Share() {
   const shares = useShares(handover?.id);
   const { data: detail } = useProject(project?.id);
   const { create, revoke } = useShareMutations(handover?.id);
+  const drift = useDrift(handover?.id);
+  const { move } = useLiving(handover?.id);
   const [recipient, setRecipient] = useState('');
   const [label, setLabel] = useState('Successor');
   const [expires, setExpires] = useState(inDays(30));
@@ -137,6 +152,14 @@ export function Share() {
     <>
       <WorkflowStepper current={4} />
       <PageHeader title={approved ? `Share approved handover v${handover?.currentVersionNo}` : 'Share the handover'} sub="Each recipient sees the frozen version filtered by their own clearance and groups. Shares expire or can be revoked; every view is logged." />
+      {approved && (drift.data?.recipientsOnOlderVersion ?? 0) > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-600/40 bg-brand-50 p-4">
+          <Users className="size-5 text-brand-700" aria-hidden />
+          <span className="flex-1 text-small text-ink-900">{drift.data!.recipientsOnOlderVersion} recipient{drift.data!.recipientsOnOlderVersion > 1 ? 's are' : ' is'} still on an older version. Moving them keeps their view name and expiry, and shows them what changed.</span>
+          {move.isSuccess ? <span className="text-small font-medium text-verified">Moved {move.data.moved}</span>
+            : <Button kind="primary" disabled={move.isPending} onClick={() => move.mutate()}>{move.isPending ? 'Moving…' : `Move them to v${handover?.currentVersionNo}`}</Button>}
+        </div>
+      )}
       {!approved && <Banner tone="inferred" icon={Lock}>Approve the handover first. <Link to="/app/approval" className="font-medium underline">Go to the approval gate</Link></Banner>}
       <Table label="Recipients" columns={[{ label: 'Recipient' }, { label: 'View' }, { label: 'Clearance' }, { label: 'Version' }, { label: 'Expires' }, { label: 'Status' }, { label: 'Actions', className: 'text-right' }]}>
         {rows.map(r => (
@@ -180,5 +203,59 @@ export function Share() {
         </Card>
       </div>
     </>
+  );
+}
+
+/** Shown on the approval gate when the handover has moved on since its approved version. */
+function DriftBanner({ versionNo, status, changes, answers, sources, busy, onReopen }: {
+  versionNo: number | null; status?: string; changes: number; answers: number; sources: number; busy: boolean; onReopen: () => void;
+}) {
+  if (!versionNo) return null;
+  if (status === 'IN_REVIEW') {
+    return <Banner icon={GitCompare}>Working on version {versionNo + 1}. Recipients keep version {versionNo} until you approve this one and move them.</Banner>;
+  }
+  if (changes + answers + sources === 0) return null;
+  const parts = [changes && `${changes} claim change${changes > 1 ? 's' : ''}`, answers && `${answers} new exit answer${answers > 1 ? 's' : ''}`,
+    sources && `${sources} source${sources > 1 ? 's' : ''} re-synced`].filter(Boolean).join(', ');
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-inferred/40 bg-inferred-bg p-4">
+      <GitCompare className="size-5 text-inferred" aria-hidden />
+      <span className="flex-1 text-small text-ink-900"><strong>Version {versionNo} is out of date:</strong> {parts} since it was approved.</span>
+      <Button kind="primary" disabled={busy} onClick={onReopen}>{busy ? 'Opening…' : `Start version ${versionNo + 1}`}</Button>
+    </div>
+  );
+}
+
+/** Download a signed export of a version, or check one. */
+function ExportTools({ handoverId, versions }: { handoverId: string; versions: number[] }) {
+  const [busy, setBusy] = useState<number | 'verify' | null>(null);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<VerificationDto | null>(null);
+  const exportVersion = async (n: number) => {
+    setBusy(n); setError('');
+    try { await download(`/api/handovers/${handoverId}/versions/${n}/export`, `baton-v${n}.zip`); } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
+  };
+  const verify = async (file: File) => {
+    setBusy('verify'); setError(''); setResult(null);
+    const form = new FormData();
+    form.append('file', file);
+    try { setResult(await api<VerificationDto>('/api/exports/verify', { method: 'POST', body: form })); } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
+  };
+  return (
+    <div className="flex flex-col gap-2 border-t border-line pt-3">
+      <p className="overline text-ink-400">Signed export</p>
+      <div className="flex flex-wrap gap-2">
+        {versions.map(n => <Button key={n} onClick={() => exportVersion(n)} disabled={busy !== null}><Download className="size-4" aria-hidden />{busy === n ? 'Preparing…' : `v${n} (.zip)`}</Button>)}
+      </div>
+      <label className="flex cursor-pointer items-center gap-2 text-small font-medium text-brand-600 hover:underline">
+        <FileCheck2 className="size-4" aria-hidden />{busy === 'verify' ? 'Checking…' : 'Verify an export…'}
+        <input type="file" accept=".zip,application/zip" className="sr-only" onChange={e => { const f = e.target.files?.[0]; if (f) verify(f); e.target.value = ''; }} />
+      </label>
+      {error && <p className="text-caption text-conflict">{error}</p>}
+      {result && (result.valid
+        ? <Banner tone="verified" icon={CheckCircle2}>Genuine: “{result.title}” v{result.versionNo}, unchanged since export and matching Baton’s record.</Banner>
+        : <Banner tone="conflict" icon={AlertTriangle}>Not valid: {result.problems.join('; ')}</Banner>)}
+      <p className="text-caption text-ink-500">The zip holds the frozen version exactly as hashed, its checklist, shares, audit trail and a printable report, with a signed manifest.</p>
+    </div>
   );
 }

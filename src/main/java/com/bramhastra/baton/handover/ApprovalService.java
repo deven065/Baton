@@ -131,8 +131,8 @@ public class ApprovalService {
         int versionNo = jdbc.sql("SELECT COALESCE(max(version_no), 0) + 1 FROM handover_version WHERE handover_id = :h")
                 .param("h", h.id()).query(Integer.class).single();
         UUID versionId = jdbc.sql("""
-                INSERT INTO handover_version (handover_id, version_no, snapshot, sha256, approved_by)
-                VALUES (:h, :n, CAST(:s AS jsonb), :sha, :me) RETURNING id
+                INSERT INTO handover_version (handover_id, version_no, snapshot, snapshot_text, sha256, approved_by)
+                VALUES (:h, :n, CAST(:s AS jsonb), :s, :sha, :me) RETURNING id
                 """).param("h", h.id()).param("n", versionNo).param("s", canonical).param("sha", sha)
                 .param("me", me.id()).query(UUID.class).single();
         int items = writeChecklist(versionId, snapshot);
@@ -261,6 +261,19 @@ public class ApprovalService {
         return items.size();
     }
 
+    /** Starts work on the next version of an approved handover: back to review; recipients keep the frozen one. */
+    @Transactional
+    public void reopen(CurrentUser me, UUID handoverId) {
+        Handover h = access.requireLead(me, handoverId);
+        if (h.status() == HandoverStatus.IN_REVIEW) {
+            return; // already open (an edit or a new exit answer reopened it)
+        }
+        HandoverStatus next = HandoverStateMachine.next(h.status(), HandoverStateMachine.Event.EDIT_AFTER_APPROVAL);
+        handovers.transition(h.id(), h.status(), next);
+        audit.record(me.id(), "HANDOVER_REOPENED", "handover", h.id(), h.projectId(),
+                Map.of("fromVersion", h.currentVersionNo() == null ? 0 : h.currentVersionNo()));
+    }
+
     // ───────────── versions and diff ─────────────
 
     @Transactional(readOnly = true)
@@ -285,13 +298,30 @@ public class ApprovalService {
     /** What changed between two versions, or between the latest version and the handover as it is now (to = 0). */
     @Transactional(readOnly = true)
     public List<Change> diff(CurrentUser me, UUID handoverId, int from, int to) {
-        Handover h = access.requireLead(me, handoverId);
+        return changes(access.requireLead(me, handoverId), from, to);
+    }
+
+    /** The same comparison without an access check, for callers that already checked (drift). */
+    @Transactional(readOnly = true)
+    public List<Change> changes(Handover h, int from, int to) {
+        return changes(h, from, to, c -> true);
+    }
+
+    /**
+     * Changes limited to claims {@code canSee} accepts, so a recipient never learns about a claim they could not
+     * read (a claim that only became visible counts as added, without its old wording).
+     */
+    @Transactional(readOnly = true)
+    public List<Change> changes(Handover h, int from, int to, java.util.function.Predicate<Map<String, Object>> canSee) {
         Map<String, Map<String, Object>> a = claimsById(version(h.id(), from));
         Map<String, Map<String, Object>> b = claimsById(to == 0 ? snapshot(h) : version(h.id(), to));
         List<Change> out = new ArrayList<>();
         b.forEach((id, c) -> {
+            if (!canSee.test(c)) {
+                return;
+            }
             Map<String, Object> old = a.get(id);
-            if (old == null) {
+            if (old == null || !canSee.test(old)) {
                 out.add(new Change("ADDED", id, (String) c.get("type"), null, (String) c.get("title")));
             } else if (!Objects.equals(old.get("title"), c.get("title")) || !Objects.equals(old.get("status"), c.get("status"))) {
                 out.add(new Change("CHANGED", id, (String) c.get("type"),
@@ -299,7 +329,7 @@ public class ApprovalService {
             }
         });
         a.forEach((id, c) -> {
-            if (!b.containsKey(id)) {
+            if (!b.containsKey(id) && canSee.test(c)) {
                 out.add(new Change("REMOVED", id, (String) c.get("type"), (String) c.get("title"), null));
             }
         });

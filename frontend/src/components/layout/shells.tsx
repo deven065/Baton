@@ -1,5 +1,5 @@
 import {
-  Database, Sparkles,
+  Database, Sparkles, Radar, TrendingUp,
   AlertTriangle, FolderKanban, UsersRound, Bell, CheckSquare, ChevronDown, ChevronRight, Clock, Eye, FileText, Home, Layers, LogOut, Menu, Plug, Search, Share2, ShieldCheck, Users, X,
   type LucideIcon,
 } from 'lucide-react';
@@ -23,6 +23,7 @@ const NAV_MAIN: Nav[] = [
   { to: '/app/view-as', label: 'View as', icon: Eye },
   { to: '/app/approval', label: 'Approval', icon: ShieldCheck },
   { to: '/app/share', label: 'Share', icon: Share2 },
+  { to: '/app/successors', label: 'Successors', icon: TrendingUp },
 ];
 const NAV_ADMIN: Nav[] = [
   { to: '/app/admin/users', label: 'People & groups', icon: Users },
@@ -32,12 +33,13 @@ const NAV_ADMIN: Nav[] = [
   { to: '/app/admin/workspace', label: 'Workspace', icon: Database },
 ];
 const NAV_TEAM: Nav = { to: '/app/team', label: 'Team', icon: UsersRound };
+const NAV_RISK: Nav = { to: '/app/risk', label: 'Knowledge risk', icon: Radar };
 
 const PAGE: Record<string, string> = {
   '/app': 'Dashboard', '/app/sources': 'Sources', '/app/reconstruct': 'Reconstruct', '/app/review': 'Review',
   '/app/conflicts': 'Conflicts', '/app/timeline': 'Timeline', '/app/view-as': 'View as', '/app/approval': 'Approval',
   '/app/share': 'Share', '/app/admin/users': 'People & groups', '/app/admin/projects': 'Projects',
-  '/app/admin/audit': 'Audit log', '/app/admin/workspace': 'Workspace', '/app/admin/ai': 'AI', '/app/team': 'Team',
+  '/app/admin/audit': 'Audit log', '/app/admin/workspace': 'Workspace', '/app/admin/ai': 'AI', '/app/team': 'Team', '/app/risk': 'Knowledge risk', '/app/successors': 'Successors',
 };
 
 function NavItem({ item, onClick }: { item: Nav; onClick?: () => void }) {
@@ -87,6 +89,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <p className="overline px-2.5 pt-4 pb-1.5 text-ink-400">Handover · {session?.handover?.departingName ?? 'none yet'}</p>
             {NAV_MAIN.map(n => <NavItem key={n.to} item={{ ...n, count: counts[n.to] }} onClick={onNavigate} />)}
             {user?.appRole === 'lead' && <NavItem item={NAV_TEAM} onClick={onNavigate} />}
+            {user?.appRole === 'lead' && <NavItem item={NAV_RISK} onClick={onNavigate} />}
           </>
         )}
         {canAdmin && (
@@ -202,7 +205,7 @@ export function AppShell() {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const project = session?.project?.name ?? session?.workspace.name ?? 'Workspace';
-  const inHandover = !['/app', '/app/team'].includes(pathname) && !pathname.startsWith('/app/admin');
+  const inHandover = !['/app', '/app/team', '/app/risk'].includes(pathname) && !pathname.startsWith('/app/admin');
   const crumbs = [project, ...(inHandover && session?.handover ? ['Handover · ' + session.handover.departingName] : []), PAGE[pathname] ?? 'Baton'];
   return (
     <div className="flex min-h-dvh">
@@ -247,6 +250,7 @@ export function AppShell() {
 
 const TABS = [
   { to: '/handover', label: 'Start here', end: true },
+  { to: '/handover/ask', label: 'Ask' },
   { to: '/handover/checklist', label: 'Checklist' },
   { to: '/handover/ownership', label: 'Ownership map' },
   { to: '/handover/timeline', label: 'Timeline' },

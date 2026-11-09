@@ -139,8 +139,10 @@ class LifecycleApiTest {
         postJson(neha, "/api/shares/" + rahulShare + "/revoke", "{}").andExpect(status().isNoContent());
         mvc.perform(get("/api/shares/" + rahulShare).header("Authorization", rahul))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.error").value("SHARE_INACTIVE"));
-        assertThat((List<?>) JsonPath.read(demo.getJson(rahul, "/api/shares"), "$")).isEmpty();
-        assertThat((List<?>) JsonPath.read(demo.getJson(arjun, "/api/shares"), "$")).hasSize(1);
+        // Other test classes share these demo people, so only look at this project's shares.
+        String mine = "$[?(@.projectName == 'Annapurna (lifecycle test)')]";
+        assertThat((List<?>) JsonPath.read(demo.getJson(rahul, "/api/shares"), mine)).isEmpty();
+        assertThat((List<?>) JsonPath.read(demo.getJson(arjun, "/api/shares"), mine)).hasSize(1);
 
         int views = jdbc.sql("SELECT count(*) FROM audit_log WHERE action = 'SHARE_VIEWED' AND entity_id = :s")
                 .param("s", UUID.fromString(arjunShare)).query(Integer.class).single();

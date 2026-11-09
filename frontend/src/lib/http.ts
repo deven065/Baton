@@ -75,3 +75,22 @@ export async function streamEvents(path: string, onEvent: (event: string, data: 
     }
   }
 }
+
+/** Downloads a file from the API with the session token (for exports). */
+export async function download(path: string, fallbackName: string) {
+  const headers = new Headers();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const res = await fetch(BASE + path, { headers });
+  if (!res.ok) {
+    let err: { error?: string; message?: string } = {};
+    try { err = await res.json(); } catch { /* not JSON */ }
+    throw new ApiError(res.status, err.error ?? `HTTP_${res.status}`, err.message ?? res.statusText);
+  }
+  const name = /filename="?([^";]+)"?/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

@@ -10,6 +10,7 @@ import {
 } from '@/data/live';
 import { useAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/http';
+import { WhatChanged } from './AskPage';
 import { cn } from '@/lib/utils';
 
 const PICK_KEY = 'baton.share';
@@ -25,7 +26,7 @@ export function useCurrentShare() {
   return { mine, list, current, view, pick };
 }
 
-function Gate({ children }: { children: (v: RecipientViewDto) => React.ReactNode }) {
+export function RecipientGate({ children }: { children: (v: RecipientViewDto) => React.ReactNode }) {
   const { mine, current, view } = useCurrentShare();
   if (mine.isLoading || (current && view.isLoading)) return <QueryState loading />;
   if (!current) {
@@ -109,7 +110,7 @@ export function StartHere() {
   const { list, current, pick } = useCurrentShare();
   const first = user?.name.split(' ')[0] ?? 'there';
   return (
-    <Gate>
+    <RecipientGate>
       {v => {
         const risks = v.claims.filter(c => c.type === 'RISK' || c.type === 'BLOCKER').sort((a, b) => Number(b.critical) - Number(a.critical)).slice(0, 5);
         const facts = v.claims.filter(c => c.status === 'VERIFIED').length;
@@ -138,6 +139,7 @@ export function StartHere() {
               </div>
             </section>
             <Hidden n={v.hiddenCount} />
+            <WhatChanged v={v} />
             <div className="grid items-start gap-6 lg:grid-cols-[1fr_480px]">
               <Card className="flex flex-col">
                 <CardHeader title="Top risks and blockers" sub="Critical ones first" />
@@ -158,13 +160,13 @@ export function StartHere() {
           </>
         );
       }}
-    </Gate>
+    </RecipientGate>
   );
 }
 
 export function ChecklistPage() {
   return (
-    <Gate>
+    <RecipientGate>
       {v => (
         <>
           <PageHeader title="Continuation checklist" sub="Generated from the approved claims, each item linked to the claim behind it." />
@@ -172,7 +174,7 @@ export function ChecklistPage() {
           <Acknowledge v={v} />
         </>
       )}
-    </Gate>
+    </RecipientGate>
   );
 }
 
@@ -181,7 +183,7 @@ const OWNERISH = new Set(['OWNER', 'CONTACT', 'ACCESS', 'DEPENDENCY']);
 export function Ownership() {
   const [filter, setFilter] = useState<'all' | 'access' | 'unknown'>('all');
   return (
-    <Gate>
+    <RecipientGate>
       {v => {
         const rows = v.claims.filter(c => OWNERISH.has(c.type))
           .filter(c => filter === 'all' || (filter === 'access' ? c.type === 'ACCESS' : !c.subject));
@@ -212,13 +214,13 @@ export function Ownership() {
           </>
         );
       }}
-    </Gate>
+    </RecipientGate>
   );
 }
 
 export function RecipientTimeline() {
   return (
-    <Gate>
+    <RecipientGate>
       {v => {
         const byId = new Map(v.claims.map(c => [c.id, c]));
         return (
@@ -245,6 +247,6 @@ export function RecipientTimeline() {
           </>
         );
       }}
-    </Gate>
+    </RecipientGate>
   );
 }

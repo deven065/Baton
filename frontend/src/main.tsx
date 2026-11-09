@@ -15,8 +15,10 @@ import Conflicts from '@/pages/lead/Conflicts';
 import Timeline from '@/pages/lead/Timeline';
 import ViewAs from '@/pages/lead/ViewAs';
 import { Approval, Share } from '@/pages/lead/ApprovalShare';
+import { RiskRadar, Successors } from '@/pages/lead/Insights';
 import ExitInterview from '@/pages/leaver/ExitInterview';
 import { ChecklistPage, Ownership, RecipientTimeline, StartHere } from '@/pages/recipient/RecipientPages';
+import { AskPage } from '@/pages/recipient/AskPage';
 import { AuditLog, ProjectsPage, TeamPage, UsersGroups } from '@/pages/admin/AdminPages';
 import { DisconnectedPage, WorkspaceSettings } from '@/pages/admin/WorkspaceSettings';
 import { AiSettings } from '@/pages/admin/AiSettings';
@@ -77,6 +79,8 @@ createRoot(document.getElementById('root')!).render(
               <Route path="approval" element={<RequireRole roles={['lead']}><Approval /></RequireRole>} />
               <Route path="share" element={<RequireRole roles={['lead']}><Share /></RequireRole>} />
               <Route path="team" element={<RequireRole roles={['lead']}><TeamPage /></RequireRole>} />
+              <Route path="risk" element={<RequireRole roles={['lead']}><RiskRadar /></RequireRole>} />
+              <Route path="successors" element={<RequireRole roles={['lead']}><Successors /></RequireRole>} />
               <Route path="admin/users" element={<RequireAdmin><UsersGroups /></RequireAdmin>} />
               <Route path="admin/projects" element={<RequireAdmin><ProjectsPage /></RequireAdmin>} />
               <Route path="admin/audit" element={<RequireAdmin><AuditLog /></RequireAdmin>} />
@@ -88,6 +92,7 @@ createRoot(document.getElementById('root')!).render(
 
             <Route path="/handover" element={<RequireRole roles={['recipient']}><RecipientShell /></RequireRole>}>
               <Route index element={<StartHere />} />
+              <Route path="ask" element={<AskPage />} />
               <Route path="checklist" element={<ChecklistPage />} />
               <Route path="ownership" element={<Ownership />} />
               <Route path="timeline" element={<RecipientTimeline />} />

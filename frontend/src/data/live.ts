@@ -318,7 +318,7 @@ export interface RecipientViewDto {
   shareId: string; roleLabel: string; expiresAt: string; acknowledgedAt: string | null; versionNo: number; sha256: string;
   approvedAt: string; approvedBy: string; handover: { title: string; scenario: string; departingName: string; project: { name: string; description: string } };
   claims: SnapshotClaim[]; hiddenCount: number; timeline: { at: string; kind: TimelineDto['kind']; title: string; claimId: string }[];
-  checklist: ChecklistItemDto[];
+  checklist: ChecklistItemDto[]; previousVersionNo: number | null; changes: ChangeDto[];
 }
 export const LEVELS: SensitivityDto[] = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED'];
 
@@ -392,3 +392,43 @@ export function useAiMutations() {
   const test = useMutation({ mutationFn: (p: AiSaveDto) => api<{ ok: boolean; model: string; latencyMs?: number; message?: string }>('/api/admin/ai/test', { method: 'POST', json: p }) });
   return { save, remove, test };
 }
+
+// ───────────── ask the handover, living handovers, progress, export, risk radar ─────────────
+
+export interface CitationDto { claimId: string; type: string; title: string; status: ClaimStatusDto; quote: string | null; source: string | null }
+export interface AskAnswerDto { found: boolean; answer: string; mode: 'ai' | 'search'; citations: CitationDto[] }
+export interface MyQuestionDto { id: string; question: string; status: GapDto['status']; answer: string | null; askedAt: string; answeredAt: string | null; answeredByLeaver: boolean }
+export const useMyQuestions = (shareId?: string | null) => useQuery({ queryKey: ['myQuestions', shareId ?? ''], queryFn: () => api<MyQuestionDto[]>(`/api/shares/${shareId}/questions`), enabled: on(shareId) });
+export function useAsk(shareId?: string | null) {
+  const qc = useQueryClient();
+  const ask = useMutation({ mutationFn: (question: string) => api<AskAnswerDto>(`/api/shares/${shareId}/ask`, { method: 'POST', json: { question } }) });
+  const send = useMutation({
+    mutationFn: (question: string) => api<MyQuestionDto>(`/api/shares/${shareId}/questions`, { method: 'POST', json: { question } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['myQuestions', shareId ?? ''] }),
+  });
+  return { ask, send };
+}
+
+export interface DriftDto { versionNo: number | null; approvedAt: string | null; status: HandoverStatusDto; changes: ChangeDto[]; sourcesUpdated: number; answersSince: number; recipientsOnOlderVersion: number }
+export const useDrift = (h?: string | null) => useQuery({ queryKey: ['drift', h ?? ''], queryFn: () => api<DriftDto>(`/api/handovers/${h}/drift`), enabled: on(h) });
+export function useLiving(h?: string | null) {
+  const qc = useQueryClient();
+  const inv = () => { for (const k of [['drift', h ?? ''], ql.gate(h ?? ''), ql.shares(h ?? ''), ql.versions(h ?? ''), ['handovers'], ['progress', h ?? '']]) qc.invalidateQueries({ queryKey: k }); };
+  const reopen = useMutation({ mutationFn: () => api<void>(`/api/handovers/${h}/reopen`, { method: 'POST' }), onSuccess: inv });
+  const move = useMutation({ mutationFn: () => api<{ moved: number }>(`/api/handovers/${h}/shares/move-to-latest`, { method: 'POST' }), onSuccess: inv });
+  return { reopen, move };
+}
+
+export interface PhaseDto { phase: 'DAY1' | 'WEEK1' | 'MONTH1'; done: number; total: number; dueAt: string; overdue: boolean }
+export interface SuccessorDto {
+  shareId: string; recipientId: string; name: string; roleLabel: string; versionNo: number; sharedAt: string; lastViewedAt: string | null;
+  acknowledgedAt: string | null; percent: number; phases: PhaseDto[]; overdueItems: string[]; openQuestions: number; answeredQuestions: number;
+}
+export const useProgress = (h?: string | null) => useQuery({ queryKey: ['progress', h ?? ''], queryFn: () => api<SuccessorDto[]>(`/api/handovers/${h}/progress`), enabled: on(h) });
+
+export interface VerificationDto { valid: boolean; signatureOk: boolean; filesOk: boolean; matchesRecord: boolean; title: string | null; versionNo: number | null; approvedAt: string | null; problems: string[] }
+
+export interface RiskPersonDto { userId: string; name: string; role: 'PROJECT_LEAD' | 'MEMBER'; share: number; chunks: number; soleTopics: string[]; access: string[]; leaving: boolean; level: 'HIGH' | 'MEDIUM' | 'LOW' }
+export interface RiskTopicDto { label: string; sources: string[]; soleSource: string | null; claims: number; lastActivity: string | null; quiet: boolean }
+export interface RadarDto { busFactor: number; totalChunks: number; people: number; team: RiskPersonDto[]; topics: RiskTopicDto[]; access: { title: string; subject: string | null; sources: string[] }[]; outsideAuthors: string[]; hasClaims: boolean }
+export const useRadar = (projectId?: string | null) => useQuery({ queryKey: ['radar', projectId ?? ''], queryFn: () => api<RadarDto>(`/api/projects/${projectId}/risk`), enabled: on(projectId) });
