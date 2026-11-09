@@ -19,6 +19,7 @@ import ExitInterview from '@/pages/leaver/ExitInterview';
 import { ChecklistPage, Ownership, RecipientTimeline, StartHere } from '@/pages/recipient/RecipientPages';
 import { AuditLog, ProjectsPage, TeamPage, UsersGroups } from '@/pages/admin/AdminPages';
 import { DisconnectedPage, WorkspaceSettings } from '@/pages/admin/WorkspaceSettings';
+import { AiSettings } from '@/pages/admin/AiSettings';
 import { DatabaseGuide } from '@/pages/public/DatabaseGuide';
 import './index.css';
 
@@ -80,6 +81,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="admin/projects" element={<RequireAdmin><ProjectsPage /></RequireAdmin>} />
               <Route path="admin/audit" element={<RequireAdmin><AuditLog /></RequireAdmin>} />
               <Route path="admin/workspace" element={<RequireAdmin><WorkspaceSettings /></RequireAdmin>} />
+              <Route path="admin/ai" element={<RequireAdmin><AiSettings /></RequireAdmin>} />
             </Route>
 
             <Route path="/interview" element={<RequireRole roles={['leaver']}><ExitInterview /></RequireRole>} />

@@ -32,8 +32,15 @@ public class GroqClient implements LlmClient {
     private final LlmCache cache;
     private final CircuitBreaker breaker;
     private final Semaphore limiter = new Semaphore(2);
+    private final String label;
 
     public GroqClient(String baseUrl, String apiKey, ObjectMapper json, LlmCache cache) {
+        this(baseUrl, apiKey, json, cache, "groq");
+    }
+
+    /** Any OpenAI-compatible chat completions API; {@code label} names it in responses and errors. */
+    public GroqClient(String baseUrl, String apiKey, ObjectMapper json, LlmCache cache, String label) {
+        this.label = label;
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build());
         factory.setReadTimeout(Duration.ofSeconds(90));
@@ -70,12 +77,12 @@ public class GroqClient implements LlmClient {
                 if (r.status() == 200) {
                     JsonNode root = json.readTree(r.body());
                     String content = root.path("choices").path(0).path("message").path("content").asString();
-                    LlmResponse out = new LlmResponse(content, req.model(), "groq",
+                    LlmResponse out = new LlmResponse(content, req.model(), label,
                             root.path("usage").path("prompt_tokens").asInt(),
                             root.path("usage").path("completion_tokens").asInt());
                     breaker.recordSuccess();
                     cache.put(key, req, out);
-                    log.info("Groq {} {} tokens in, {} out", req.promptId(), out.tokensIn(), out.tokensOut());
+                    log.info("AI ({}) {} {} tokens in, {} out", label, req.promptId(), out.tokensIn(), out.tokensOut());
                     return out;
                 }
                 if (r.status() == 429 || r.status() >= 500) {
@@ -85,13 +92,14 @@ public class GroqClient implements LlmClient {
                     continue;
                 }
                 breaker.recordFailure();
-                throw new LlmClientError("Groq returned " + r.status() + ": " + abbreviate(r.body()));
+                throw new LlmClientError("The AI provider (" + label + ") refused the request: HTTP " + r.status()
+                        + (r.status() == 401 || r.status() == 403 ? " (check the API key)" : r.status() == 404 ? " (check the model name)" : ""));
             }
             breaker.recordFailure();
-            throw new LlmUnavailableException("Waiting for AI capacity; Groq kept returning errors");
+            throw new LlmUnavailableException("Waiting for AI capacity; " + label + " kept returning errors");
         } catch (org.springframework.web.client.ResourceAccessException e) {
             breaker.recordFailure();
-            throw new LlmUnavailableException("Cannot reach Groq: " + e.getMessage());
+            throw new LlmUnavailableException("Cannot reach the AI provider (" + label + ")");
         } finally {
             limiter.release();
         }

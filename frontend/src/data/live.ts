@@ -374,3 +374,21 @@ export const useDisconnectWorkspace = () => useMutation({
   mutationFn: (p: { confirm: string; password: string }) =>
     api<{ recoveryKey: string; disconnectedAt: string }>('/api/admin/workspace/disconnect', { method: 'POST', json: p }),
 });
+
+// ───────────── phase 5: bring-your-own AI ─────────────
+
+export type AiProvider = 'GROQ' | 'OPENAI' | 'OPENROUTER' | 'CUSTOM';
+export interface AiOverviewDto {
+  settings: { configured: boolean; enabled: boolean; provider: AiProvider | null; baseUrl: string | null; model: string | null; keyHint: string | null; updatedAt: string | null; updatedByName: string | null };
+  usage: { calls: number; failed: number; tokensIn: number; tokensOut: number; byDay: { day: string; calls: number; tokens: number }[] };
+}
+export interface AiSaveDto { provider: AiProvider; baseUrl?: string; model?: string; apiKey?: string; enabled?: boolean }
+export const useAiSettings = () => useQuery({ queryKey: ['aiSettings'], queryFn: () => api<AiOverviewDto>('/api/admin/ai') });
+export function useAiMutations() {
+  const qc = useQueryClient();
+  const inv = () => qc.invalidateQueries({ queryKey: ['aiSettings'] });
+  const save = useMutation({ mutationFn: (p: AiSaveDto) => api('/api/admin/ai', { method: 'PUT', json: p }), onSuccess: inv });
+  const remove = useMutation({ mutationFn: () => api<void>('/api/admin/ai', { method: 'DELETE' }), onSuccess: inv });
+  const test = useMutation({ mutationFn: (p: AiSaveDto) => api<{ ok: boolean; model: string; latencyMs?: number; message?: string }>('/api/admin/ai/test', { method: 'POST', json: p }) });
+  return { save, remove, test };
+}
