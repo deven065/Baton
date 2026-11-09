@@ -1,150 +1,182 @@
-import { CheckCircle2, GitCommitHorizontal } from 'lucide-react';
-import { useState } from 'react';
+import { AlertTriangle, CheckCircle2, GitCommitHorizontal, Lock } from 'lucide-react';
+import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { SensitivityChip, StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/form';
-import { Avatar, Banner, Card, CardHeader, DemoNotice, PageHeader, Progress, StatusCircle, Table, Td, WorkflowStepper, type StepState } from '@/components/ui/misc';
-import { useAcknowledged } from '@/data/api';
-import { useClaimList, useGapList, useSummary } from '@/data/live';
-import { useSession } from '@/lib/auth';
-import { PEOPLE } from '@/data/mock';
+import { Avatar, Banner, Card, CardHeader, PageHeader, Progress, QueryState, StatusCircle, Table, Td, WorkflowStepper } from '@/components/ui/misc';
+import type { Status } from '@/data/types';
+import {
+  fmtDate, fmtDateTime, sens, typeLabel, useApprove, useDiff, useGate, useProject, useShareMutations, useShares, useVersions,
+  type ShareRowDto,
+} from '@/data/live';
+import { useAuth, useSession } from '@/lib/auth';
+import { ApiError } from '@/lib/http';
 import { cn } from '@/lib/utils';
+
+const FIX: Record<string, { to: string; action: string }> = {
+  conflicts: { to: '/app/conflicts', action: 'Resolve' },
+  critical: { to: '/app/review', action: 'Review' },
+  inferred: { to: '/app/review', action: 'Review' },
+  pending: { to: '/app/review', action: 'Review' },
+  claims: { to: '/app/reconstruct', action: 'Reconstruct' },
+};
+const initials = (n: string) => n.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
 export function Approval() {
   const { handover } = useSession();
-  const { data: summary, isLoading } = useSummary(handover?.id);
-  const { data: gaps = [] } = useGapList(handover?.id);
-  const { data: claims = [] } = useClaimList(handover?.id);
-  const conflicts = summary?.byStatus.CONFLICTING ?? 0;
-  const inferredOpen = claims.filter(c => c.status === 'INFERRED' && (c.reviewState === 'PENDING' || c.reviewState === 'NEEDS_INFO')).length;
-  const criticalOpen = claims.filter(c => c.critical && (c.reviewState === 'PENDING' || c.reviewState === 'NEEDS_INFO')).length;
-  const pending = (summary?.byReviewState.PENDING ?? 0) + (summary?.byReviewState.NEEDS_INFO ?? 0);
-  const openGaps = gaps.filter(g => g.status === 'OPEN' || g.status === 'UNANSWERED').length;
+  const { refresh } = useAuth();
+  const gate = useGate(handover?.id);
+  const versions = useVersions(handover?.id);
+  const latest = versions.data?.[0];
+  const diff = useDiff(handover?.id, latest?.versionNo);
+  const approve = useApprove(handover?.id);
+  const checks = gate.data?.checks ?? [];
+  const blockers = checks.filter(c => c.blocking && !c.ok).length;
+  const warnings = checks.filter(c => !c.blocking && !c.ok).length;
+  const status = gate.data?.status;
+  const err = approve.error instanceof ApiError ? approve.error : null;
 
-  const gates: { state: StepState; title: string; desc: string; to?: string; action?: string }[] = [
-    { state: 'done', title: 'Every shown quote is verified by code', desc: 'Claims without a matching quote are never marked Verified' },
-    { state: conflicts ? 'fail' : 'done', title: conflicts ? `${conflicts} conflicting claim${conflicts > 1 ? 's' : ''}` : 'No conflicts', desc: 'Sources that disagree must be resolved', to: '/app/conflicts', action: conflicts ? 'Resolve' : undefined },
-    { state: criticalOpen ? 'fail' : 'done', title: criticalOpen ? `${criticalOpen} critical claim${criticalOpen > 1 ? 's' : ''} not reviewed` : 'Critical claims reviewed', desc: 'Risks, access to transfer and blockers need a decision', to: '/app/review', action: criticalOpen ? 'Review' : undefined },
-    { state: inferredOpen ? 'warn' : 'done', title: inferredOpen ? `${inferredOpen} inferred claim${inferredOpen > 1 ? 's' : ''} need a decision` : 'Inferred claims decided', desc: 'Inferred claims are never shown as facts', to: '/app/review', action: inferredOpen ? 'Review' : undefined },
-    { state: openGaps ? 'warn' : 'done', title: openGaps ? `${openGaps} exit question${openGaps > 1 ? 's' : ''} unanswered` : 'Exit interview complete', desc: `${handover?.departingName ?? 'The departing member'} answers these, or they are routed to you` },
-    { state: pending ? 'warn' : 'done', title: pending ? `${pending} claims still to review` : 'All claims reviewed', desc: 'Accept, edit or reject each claim', to: '/app/review', action: pending ? 'Review' : undefined },
-  ];
-  const blockers = gates.filter(g => g.state === 'fail').length;
-  const warnings = gates.filter(g => g.state === 'warn').length;
-
+  if (!handover) {
+    return (<><PageHeader title="Approval gate" /><p className="text-small text-ink-500">Start a handover first.</p></>);
+  }
   return (
     <>
       <WorkflowStepper current={3} />
-      <PageHeader title="Approval gate" sub="Approval will freeze a version with a SHA-256 hash. Recipients only ever see approved versions." />
+      <PageHeader title="Approval gate" sub="Approving freezes a version with a SHA-256 hash. Recipients only ever see approved versions." />
       <div className="grid items-start gap-6 xl:grid-cols-[1fr_420px]">
         <Card className="flex flex-col p-6">
-          <CardHeader title="Checks" sub={isLoading ? 'Loading…' : `Computed live from ${summary?.total ?? 0} claims and ${gaps.length} exit questions`} right={<StatusBadge status={blockers ? 'conflicting' : warnings ? 'inferred' : 'verified'} label={blockers ? `${blockers} blocking` : warnings ? `${warnings} to finish` : 'Ready'} />} />
+          <CardHeader
+            title="Checks"
+            sub={gate.isLoading ? 'Loading…' : 'Computed by the server from the handover as it is now'}
+            right={<StatusBadge status={blockers ? 'conflicting' : warnings ? 'inferred' : 'verified'} label={blockers ? `${blockers} blocking` : warnings ? `${warnings} to finish` : 'Ready'} />}
+          />
           <ul className="mt-2 divide-y divide-line">
-            {gates.map(g => (
-              <li key={g.title} className="flex items-center gap-3 py-3">
-                <StatusCircle state={g.state} size={24} />
-                <span className="flex-1"><span className="block text-small font-medium">{g.title}</span><span className="block text-caption text-ink-500">{g.desc}</span></span>
-                {g.action && g.to && <Link to={g.to} className="text-small font-medium text-brand-600 hover:underline">{g.action}</Link>}
+            {checks.map(c => (
+              <li key={c.key} className="flex items-center gap-3 py-3">
+                <StatusCircle state={c.ok ? 'done' : c.blocking ? 'fail' : 'warn'} size={24} />
+                <span className="flex-1"><span className="block text-small font-medium">{c.title}</span><span className="block text-caption text-ink-500">{c.detail}{!c.blocking && ' · not blocking'}</span></span>
+                {!c.ok && FIX[c.key] && <Link to={FIX[c.key].to} className="text-small font-medium text-brand-600 hover:underline">{FIX[c.key].action}</Link>}
               </li>
             ))}
           </ul>
+          <QueryState loading={gate.isLoading} error={gate.error} />
+          {err && <Banner tone="conflict" icon={AlertTriangle} className="mt-3">{Array.isArray(err.details) ? (err.details as string[]).join(' · ') : err.message}</Banner>}
+          {approve.isSuccess && <Banner tone="verified" icon={CheckCircle2} className="mt-3">Version {approve.data.versionNo} frozen with {approve.data.checklistItems} checklist items. <Link to="/app/share" className="font-medium underline">Share it</Link></Banner>}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-[18px]">
-            <p className="text-small text-ink-500">Approving and freezing versions arrives with milestone M5 — there is no approval endpoint yet.</p>
-            <Button kind="primary" size="lg" disabled title="Approval API arrives in M5">Approve and freeze</Button>
+            <p className="text-small text-ink-500">
+              {status === 'APPROVED' || status === 'SHARED' ? `Version ${gate.data?.currentVersionNo} is approved. Editing a claim reopens review.` : status === 'IN_REVIEW' ? (gate.data?.canApprove ? 'Ready to freeze. Pending claims are included as they are.' : 'Fix the blocking checks to approve.') : 'Reconstruct the handover before approving.'}
+            </p>
+            <Button kind="primary" size="lg" disabled={!gate.data?.canApprove || approve.isPending} onClick={() => approve.mutate(undefined, { onSuccess: () => refresh() })}>
+              <Lock className="size-4" aria-hidden />{approve.isPending ? 'Freezing…' : 'Approve and freeze'}
+            </Button>
           </div>
         </Card>
         <div className="flex flex-col gap-4">
-          <DemoNotice what="Versions and diffs below are an M5 preview, not this handover’s data." />
           <Card className="flex flex-col gap-2.5">
             <h2 className="text-h3 font-semibold">Versions</h2>
-            <Version v="v2" badge={<StatusBadge status="inferred" label="Draft" />} meta="Edited today" hash="not frozen yet" current />
-            <Version v="v1" badge={<StatusBadge status="verified" label="Approved" />} meta="Approved earlier · shared with 1" hash="sha256 3f9a1c…7be0c21e" />
+            {versions.data?.map((v, i) => (
+              <div key={v.versionNo} className={cn('flex flex-col gap-1.5 rounded-xl border p-3.5', i === 0 ? 'border-brand-600 bg-brand-50 ring-1 ring-brand-600' : 'border-line')}>
+                <span className="flex items-center gap-2"><span className="text-h3 font-semibold">v{v.versionNo}</span><StatusBadge status="verified" label="Approved" /></span>
+                <span className="text-caption text-ink-500">{v.approvedByName} · {fmtDateTime(v.approvedAt)} · {v.claims} claims · {v.checklistItems} checklist items</span>
+                <span className="flex items-center gap-1.5 font-mono text-caption text-ink-700" title={v.sha256}><GitCommitHorizontal className="size-3 text-ink-400" aria-hidden />sha256 {v.sha256.slice(0, 8)}…{v.sha256.slice(-8)}</span>
+              </div>
+            ))}
+            {versions.data?.length === 0 && <p className="text-small text-ink-500">Nothing approved yet.</p>}
           </Card>
-          <Card className="flex flex-col gap-2">
-            <CardHeader title="Changes since v1" sub="Example diff" />
-            <Diff sign="+" text="Launch date: 29 November 2026" cls="bg-verified-bg text-verified" />
-            <Diff sign="−" text="Launch date: 15 November 2026" cls="bg-conflict-bg text-conflict" strike />
-          </Card>
+          {latest && (
+            <Card className="flex flex-col gap-2">
+              <CardHeader title={`Changes since v${latest.versionNo}`} sub="The handover as it is now, compared with the last frozen version" />
+              {diff.data?.map(c => (
+                <p key={c.claimId + c.kind} className={cn('flex gap-2.5 rounded-md px-3 py-1.5 text-small', c.kind === 'ADDED' ? 'bg-verified-bg' : c.kind === 'REMOVED' ? 'bg-conflict-bg' : 'bg-inferred-bg')}>
+                  <span aria-hidden className="font-mono">{c.kind === 'ADDED' ? '+' : c.kind === 'REMOVED' ? '−' : '~'}</span>
+                  <span className="flex flex-col"><span className="text-caption text-ink-500">{typeLabel(c.type)}</span><span className={cn('text-ink-900', c.kind === 'REMOVED' && 'line-through')}>{c.after ?? c.before}</span></span>
+                </p>
+              ))}
+              {diff.data?.length === 0 && <p className="text-small text-ink-500">No changes.</p>}
+            </Card>
+          )}
         </div>
       </div>
     </>
   );
 }
 
-function Version({ v, badge, meta, hash, current }: { v: string; badge: React.ReactNode; meta: string; hash: string; current?: boolean }) {
-  return (
-    <div className={cn('flex flex-col gap-1.5 rounded-xl border p-3.5', current ? 'border-brand-600 bg-brand-50 ring-1 ring-brand-600' : 'border-line')}>
-      <span className="flex items-center gap-2"><span className="text-h3 font-semibold">{v}</span>{badge}</span>
-      <span className="text-caption text-ink-500">{meta}</span>
-      <span className="flex items-center gap-1.5 font-mono text-caption text-ink-700"><GitCommitHorizontal className="size-3 text-ink-400" aria-hidden />{hash}</span>
-    </div>
-  );
-}
-
-function Diff({ sign, text, cls, strike }: { sign: string; text: string; cls: string; strike?: boolean }) {
-  return (
-    <p className={cn('flex gap-2.5 rounded-md px-3 py-1.5 font-mono text-small', cls)}>
-      <span aria-hidden>{sign}</span><span className={cn('text-ink-900', strike && 'line-through')}>{text}</span>
-    </p>
-  );
-}
-
-const RECIPIENTS = [
-  { p: 'rohan', email: 'rohan.k@northfield.club', view: 'Engineer view', level: 'Confidential' as const, expires: '20 Dec 2026' },
-  { p: 'sara', email: 'sara.d@northfield.club', view: 'Design view', level: 'Internal' as const, expires: '20 Dec 2026' },
-];
+const STATE: Record<ShareRowDto['state'], { s: Status; l: (r: ShareRowDto) => string }> = {
+  SENT: { s: 'single', l: () => 'Not opened yet' },
+  OPENED: { s: 'inferred', l: r => `Opened ${r.lastViewedAt ? fmtDate(r.lastViewedAt) : ''} · not acknowledged` },
+  ACKNOWLEDGED: { s: 'verified', l: r => `Acknowledged ${r.acknowledgedAt ? fmtDate(r.acknowledgedAt) : ''}` },
+  EXPIRED: { s: 'stale', l: () => 'Expired' },
+  REVOKED: { s: 'stale', l: () => 'Revoked' },
+};
+const inDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
 
 export function Share() {
-  const { data: ack } = useAcknowledged();
-  const [revoked, setRevoked] = useState<Set<string>>(new Set());
-  const acked = 1 + (ack ? 1 : 0);
+  const { handover, project, user } = useSession();
+  const shares = useShares(handover?.id);
+  const { data: detail } = useProject(project?.id);
+  const { create, revoke } = useShareMutations(handover?.id);
+  const [recipient, setRecipient] = useState('');
+  const [label, setLabel] = useState('Successor');
+  const [expires, setExpires] = useState(inDays(30));
+  const approved = handover?.currentVersionNo != null && (handover.status === 'APPROVED' || handover.status === 'SHARED');
+  const rows = shares.data ?? [];
+  const active = rows.filter(r => r.state !== 'REVOKED' && r.state !== 'EXPIRED');
+  const acked = active.filter(r => r.state === 'ACKNOWLEDGED').length;
+  const candidates = (detail?.members ?? []).filter(m => m.userId !== user.id && m.userId !== handover?.departingUserId && !active.some(r => r.recipientId === m.userId && r.versionNo === handover?.currentVersionNo));
+  const err = create.error instanceof ApiError ? create.error : null;
+  const details = (err?.details ?? null) as Record<string, string> | null;
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    create.mutate({ recipientId: recipient, roleLabel: label.trim(), expiresAt: new Date(expires + 'T23:59:59').toISOString() },
+      { onSuccess: () => setRecipient('') });
+  };
+
   return (
     <>
       <WorkflowStepper current={4} />
-      <PageHeader title="Share approved handover v1" sub="Each recipient gets their own role-filtered view. Shares can expire or be revoked; every view is logged." right={<Button kind="primary">Add recipient</Button>} />
-      <DemoNotice what="Shares and acknowledgements arrive with milestone M5. This screen shows the planned design with sample people." />
-      <Table label="Recipients" columns={[{ label: 'Recipient' }, { label: 'View' }, { label: 'Clearance' }, { label: 'Expires' }, { label: 'Status' }, { label: 'Actions', className: 'text-right' }]}>
-        {RECIPIENTS.map(r => {
-          const person = PEOPLE[r.p];
-          const isRevoked = revoked.has(r.p);
-          const status = isRevoked ? <StatusBadge status="stale" label="Revoked" /> : r.p === 'sara' || ack ? <StatusBadge status="verified" label={r.p === 'sara' ? 'Acknowledged 7 Nov' : 'Acknowledged just now'} /> : <StatusBadge status="single" label="Opened · not acknowledged" />;
-          return (
-            <tr key={r.p}>
-              <Td><span className="flex items-center gap-2.5"><Avatar initials={person.initials} tone={person.tone} size="sm" /><span><span className="block font-medium text-ink-900">{person.name}</span><span className="block text-caption text-ink-500">{r.email}</span></span></span></Td>
-              <Td>{r.view}</Td>
-              <Td><SensitivityChip level={r.level} /></Td>
-              <Td className="whitespace-nowrap">{r.expires}</Td>
-              <Td>{status}</Td>
-              <Td className="text-right whitespace-nowrap">
-                {!isRevoked && <><Button>{r.p === 'rohan' && !ack ? 'Remind' : 'Copy link'}</Button> <Button kind="ghost" onClick={() => setRevoked(s => new Set(s).add(r.p))}>Revoke</Button></>}
-              </Td>
-            </tr>
-          );
-        })}
-        <tr>
-          <Td><span className="flex items-center gap-2.5"><Avatar initials="MJ" tone={5} size="sm" /><span><span className="block font-medium text-ink-900">Meera Joshi</span><span className="block text-caption text-ink-500">external · NGO partner</span></span></span></Td>
-          <Td>Partner summary</Td><Td><SensitivityChip level="Public" /></Td><Td>1 Dec 2026</Td><Td><StatusBadge status="stale" label="Expired" /></Td>
-          <Td className="text-right"><Button>Renew</Button></Td>
-        </tr>
+      <PageHeader title={approved ? `Share approved handover v${handover?.currentVersionNo}` : 'Share the handover'} sub="Each recipient sees the frozen version filtered by their own clearance and groups. Shares expire or can be revoked; every view is logged." />
+      {!approved && <Banner tone="inferred" icon={Lock}>Approve the handover first. <Link to="/app/approval" className="font-medium underline">Go to the approval gate</Link></Banner>}
+      <Table label="Recipients" columns={[{ label: 'Recipient' }, { label: 'View' }, { label: 'Clearance' }, { label: 'Version' }, { label: 'Expires' }, { label: 'Status' }, { label: 'Actions', className: 'text-right' }]}>
+        {rows.map(r => (
+          <tr key={r.id}>
+            <Td><span className="flex items-center gap-2.5"><Avatar initials={initials(r.recipientName)} tone={3} size="sm" /><span><span className="block font-medium text-ink-900">{r.recipientName}</span><span className="block text-caption text-ink-500">{r.recipientEmail}</span></span></span></Td>
+            <Td>{r.roleLabel}</Td>
+            <Td><SensitivityChip level={sens(r.clearance)} /></Td>
+            <Td>v{r.versionNo}</Td>
+            <Td className="whitespace-nowrap">{fmtDate(r.expiresAt)}</Td>
+            <Td><StatusBadge status={STATE[r.state].s} label={STATE[r.state].l(r)} /></Td>
+            <Td className="text-right whitespace-nowrap">{r.state !== 'REVOKED' && r.state !== 'EXPIRED' && <Button kind="ghost" disabled={revoke.isPending} onClick={() => revoke.mutate(r.id)}>Revoke</Button>}</Td>
+          </tr>
+        ))}
       </Table>
+      <QueryState loading={shares.isLoading} error={shares.error} empty={rows.length === 0} emptyText="Not shared with anyone yet." />
       <div className="grid items-start gap-6 xl:grid-cols-[1fr_400px]">
         <Card className="flex flex-col gap-3.5">
           <h2 className="text-h3 font-semibold">Add a recipient</h2>
-          <form className="grid gap-3 sm:grid-cols-[1fr_160px_140px]" onSubmit={e => e.preventDefault()}>
-            <Field label="Email">{id => <Input id={id} type="email" placeholder="new.member@northfield.club" />}</Field>
-            <Field label="View">{id => <Input id={id} defaultValue="Engineer view" />}</Field>
-            <Field label="Expires">{id => <Input id={id} defaultValue="20 Dec 2026" />}</Field>
-            <div className="sm:col-span-3 flex justify-end"><Button kind="primary" type="submit">Share v1</Button></div>
+          <form className="grid gap-3 sm:grid-cols-[1fr_160px_160px]" onSubmit={submit}>
+            <Field label="Person" hint={candidates.length === 0 ? <p className="text-caption text-ink-500">Add people to the project team to share with them.</p> : undefined}>
+              {id => (
+                <select id={id} value={recipient} onChange={e => setRecipient(e.target.value)} disabled={!approved} className="w-full rounded-lg border border-line-strong bg-card px-3 py-2.5 text-body">
+                  <option value="">Choose a team member…</option>
+                  {candidates.map(m => <option key={m.userId} value={m.userId}>{m.displayName} · {sens(m.clearance)}</option>)}
+                </select>
+              )}
+            </Field>
+            <Field label="View name">{id => <Input id={id} value={label} onChange={e => setLabel(e.target.value)} maxLength={60} disabled={!approved} />}</Field>
+            <Field label="Expires">{id => <Input id={id} type="date" value={expires} min={inDays(1)} max={inDays(90)} onChange={e => setExpires(e.target.value)} disabled={!approved} />}</Field>
+            {err && <div className="sm:col-span-3"><Banner tone="conflict" icon={AlertTriangle}>{details && !Array.isArray(details) ? Object.values(details).join(' ') : err.message}</Banner></div>}
+            <div className="sm:col-span-3 flex justify-end"><Button kind="primary" type="submit" disabled={!approved || !recipient || create.isPending}>{create.isPending ? 'Sharing…' : `Share v${handover?.currentVersionNo ?? ''}`}</Button></div>
           </form>
         </Card>
         <Card className="flex flex-col gap-2.5">
           <h2 className="text-h3 font-semibold">Did the handover land?</h2>
-          <p className="flex items-end gap-2"><span className="text-stat font-semibold">{acked} / 2</span><span className="pb-1 text-small text-ink-500">recipients acknowledged</span></p>
-          <Progress value={acked / 2} tone="bg-verified" label="Acknowledged" />
-          {ack
-            ? <Banner tone="verified" icon={CheckCircle2}>Rohan acknowledged the handover. Both recipients have confirmed it landed.</Banner>
-            : <p className="text-small text-ink-500">Rohan opened the handover 2 hours ago and read Start here. You’ll be notified when he acknowledges.</p>}
+          <p className="flex items-end gap-2"><span className="text-stat font-semibold">{acked} / {active.length}</span><span className="pb-1 text-small text-ink-500">recipients acknowledged</span></p>
+          <Progress value={active.length ? acked / active.length : 0} tone="bg-verified" label="Acknowledged" />
+          {active.length > 0 && acked === active.length
+            ? <Banner tone="verified" icon={CheckCircle2}>Every recipient has confirmed the handover landed.</Banner>
+            : <p className="text-small text-ink-500">{active.length ? 'Recipients acknowledge once they have read Start here and their Day 1 list.' : 'Share the approved version to start.'}</p>}
         </Card>
       </div>
     </>

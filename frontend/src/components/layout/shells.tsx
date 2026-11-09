@@ -5,8 +5,9 @@ import {
 import { useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { SensitivityChip } from '@/components/ui/badge';
-import { useSummary } from '@/data/live';
-import { Avatar, DemoNotice, Kbd, Logo } from '@/components/ui/misc';
+import { fmtDate, useSummary } from '@/data/live';
+import { useCurrentShare } from '@/pages/recipient/RecipientPages';
+import { Avatar, Kbd, Logo } from '@/components/ui/misc';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +21,7 @@ const NAV_MAIN: Nav[] = [
   { to: '/app/timeline', label: 'Timeline', icon: Clock },
   { to: '/app/view-as', label: 'View as', icon: Eye },
   { to: '/app/approval', label: 'Approval', icon: ShieldCheck },
-  { to: '/app/share', label: 'Share', icon: Share2, demo: true },
+  { to: '/app/share', label: 'Share', icon: Share2 },
 ];
 const NAV_ADMIN: Nav[] = [
   { to: '/app/admin/users', label: 'People & groups', icon: Users },
@@ -171,6 +172,7 @@ const TABS = [
 
 export function RecipientShell() {
   const { user, signOut } = useAuth();
+  const { view } = useCurrentShare();
   const navigate = useNavigate();
   return (
     <div className="min-h-dvh">
@@ -192,7 +194,7 @@ export function RecipientShell() {
             </nav>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden items-center gap-1.5 text-caption text-ink-500 sm:flex"><ShieldCheck className="size-3.5 text-verified" aria-hidden />Approved v2 · 9 Nov 2026</span>
+            {view.data && <span className="hidden items-center gap-1.5 text-caption text-ink-500 sm:flex" title={`sha256 ${view.data.sha256}`}><ShieldCheck className="size-3.5 text-verified" aria-hidden />Approved v{view.data.versionNo} · {fmtDate(view.data.approvedAt)}</span>}
             {user && <SensitivityChip level={user.clearance} />}
             {user && (
               <button type="button" aria-label="Sign out" title="Sign out" onClick={() => { signOut(); navigate('/login'); }} className="cursor-pointer">
@@ -210,7 +212,6 @@ export function RecipientShell() {
         </nav>
       </header>
       <main className="mx-auto flex max-w-[1120px] flex-col gap-6 px-4 py-6 sm:py-8">
-        <DemoNotice what="The recipient handover (shares of an approved version) arrives with milestone M5. These pages show sample content." />
         <Outlet />
       </main>
     </div>

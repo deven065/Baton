@@ -295,3 +295,70 @@ export function useCreateHandover(projectId?: string | null) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['handovers'] }),
   });
 }
+
+// ───────────── phase 3: approval, versions, shares, recipient view ─────────────
+
+export interface GateCheckDto { key: string; ok: boolean; blocking: boolean; title: string; detail: string; count: number }
+export interface GateDto { canApprove: boolean; checks: GateCheckDto[]; status: HandoverStatusDto; currentVersionNo: number | null }
+export interface VersionDto { versionNo: number; sha256: string; approvedBy: string; approvedByName: string; approvedAt: string; claims: number; checklistItems: number }
+export interface ChangeDto { kind: 'ADDED' | 'CHANGED' | 'REMOVED'; claimId: string; type: string; before: string | null; after: string | null }
+export interface ShareRowDto {
+  id: string; recipientId: string; recipientName: string; recipientEmail: string; clearance: SensitivityDto; roleLabel: string;
+  versionNo: number; createdAt: string; expiresAt: string; revokedAt: string | null; acknowledgedAt: string | null; lastViewedAt: string | null;
+  state: 'SENT' | 'OPENED' | 'ACKNOWLEDGED' | 'EXPIRED' | 'REVOKED';
+}
+export interface MyShareDto { id: string; handoverTitle: string; projectName: string; departingName: string; versionNo: number; roleLabel: string; expiresAt: string; acknowledgedAt: string | null }
+export interface SnapshotEvidence { quote: string; sourceType: SourceTypeDto; source: string; document: string; date: string | null }
+export interface SnapshotClaim {
+  id: string; type: string; title: string; body: string | null; subject: string | null; status: ClaimStatusDto; confidence: string;
+  sensitivity: number; aclGroups: string[]; critical: boolean; reviewState: ReviewStateDto; evidence: SnapshotEvidence[];
+}
+export interface ChecklistItemDto { id: string; phase: 'DAY1' | 'WEEK1' | 'MONTH1'; position: number; text: string; claimId: string | null; done: boolean }
+export interface RecipientViewDto {
+  shareId: string; roleLabel: string; expiresAt: string; acknowledgedAt: string | null; versionNo: number; sha256: string;
+  approvedAt: string; approvedBy: string; handover: { title: string; scenario: string; departingName: string; project: { name: string; description: string } };
+  claims: SnapshotClaim[]; hiddenCount: number; timeline: { at: string; kind: TimelineDto['kind']; title: string; claimId: string }[];
+  checklist: ChecklistItemDto[];
+}
+export const LEVELS: SensitivityDto[] = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED'];
+
+export const ql = {
+  gate: (h: string) => ['gate', h] as const,
+  versions: (h: string) => ['versions', h] as const,
+  diff: (h: string, from: number) => ['diff', h, from] as const,
+  shares: (h: string) => ['shares', h] as const,
+  mine: ['myShares'] as const,
+  share: (id: string) => ['share', id] as const,
+};
+
+export const useGate = (h?: string | null) => useQuery({ queryKey: ql.gate(h ?? ''), queryFn: () => api<GateDto>(`/api/handovers/${h}/approval`), enabled: on(h) });
+export const useVersions = (h?: string | null) => useQuery({ queryKey: ql.versions(h ?? ''), queryFn: () => api<VersionDto[]>(`/api/handovers/${h}/versions`), enabled: on(h) });
+export const useDiff = (h?: string | null, from?: number | null) => useQuery({ queryKey: ql.diff(h ?? '', from ?? 0), queryFn: () => api<ChangeDto[]>(`/api/handovers/${h}/diff?from=${from}&to=0`), enabled: on(h) && !!from });
+export const useShares = (h?: string | null) => useQuery({ queryKey: ql.shares(h ?? ''), queryFn: () => api<ShareRowDto[]>(`/api/handovers/${h}/shares`), enabled: on(h) });
+export const useMyShares = () => useQuery({ queryKey: ql.mine, queryFn: () => api<MyShareDto[]>('/api/shares') });
+export const useShareView = (id?: string | null) => useQuery({ queryKey: ql.share(id ?? ''), queryFn: () => api<RecipientViewDto>(`/api/shares/${id}`), enabled: on(id), retry: false });
+
+export function useApprove(h?: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<VersionDto>(`/api/handovers/${h}/approve`, { method: 'POST' }),
+    onSuccess: () => { for (const k of [ql.gate(h ?? ''), ql.versions(h ?? ''), ['diff', h ?? ''], ['handovers']]) qc.invalidateQueries({ queryKey: k }); },
+  });
+}
+export function useShareMutations(h?: string | null) {
+  const qc = useQueryClient();
+  const inv = () => { for (const k of [ql.shares(h ?? ''), ql.gate(h ?? ''), ['handovers']]) qc.invalidateQueries({ queryKey: k }); };
+  const create = useMutation({
+    mutationFn: (p: { recipientId: string; roleLabel: string; expiresAt?: string }) => api<ShareRowDto>(`/api/handovers/${h}/shares`, { method: 'POST', json: p }),
+    onSuccess: inv,
+  });
+  const revoke = useMutation({ mutationFn: (id: string) => api<void>(`/api/shares/${id}/revoke`, { method: 'POST' }), onSuccess: inv });
+  return { create, revoke };
+}
+export function useRecipientMutations(shareId?: string | null) {
+  const qc = useQueryClient();
+  const inv = () => { qc.invalidateQueries({ queryKey: ql.share(shareId ?? '') }); qc.invalidateQueries({ queryKey: ql.mine }); };
+  const check = useMutation({ mutationFn: (p: { itemId: string; done: boolean }) => api<void>(`/api/shares/${shareId}/checklist/${p.itemId}`, { method: 'PUT', json: { done: p.done } }), onSuccess: inv });
+  const acknowledge = useMutation({ mutationFn: () => api<{ acknowledgedAt: string }>(`/api/shares/${shareId}/acknowledge`, { method: 'POST' }), onSuccess: inv });
+  return { check, acknowledge };
+}
