@@ -1,0 +1,29 @@
+name: Deploy API
+
+# Render builds the API from main. Its own auto-deploy stopped seeing pushes after the repository
+# was recreated, so this calls the service's deploy hook instead. Frontend-only and docs-only pushes
+# are skipped: Vercel deploys the frontend by itself.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "frontend/**"
+      - "design/**"
+      - "**/*.md"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then echo "RENDER_DEPLOY_HOOK secret is not set"; exit 1; fi
+          curl --fail --silent --show-error -X POST "$HOOK" -o /dev/null
+          echo "Render deploy requested for ${GITHUB_SHA::7}"
