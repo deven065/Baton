@@ -50,7 +50,7 @@ export function AiSettings() {
       <QueryState loading={isLoading} error={error} />
       {data && (
         <>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="reveal-list grid gap-4 md:grid-cols-3">
             <Card className="flex flex-col gap-2">
               <h2 className="flex items-center gap-2 text-h3 font-semibold"><Sparkles className="size-5 text-brand-600" aria-hidden />Status</h2>
               {s?.configured && s.enabled

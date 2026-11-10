@@ -10,7 +10,8 @@ import { ApiError, api, wakeApi } from '@/lib/http';
 
 function BrandPanel({ over, title, sub, children }: { over: string; title: string; sub: string; children?: ReactNode }) {
   return (
-    <aside className="aurora hidden w-[640px] shrink-0 flex-col justify-between p-14 lg:flex">
+    <aside className="slide-panel relative isolate hidden w-[640px] shrink-0 flex-col justify-between overflow-hidden p-14 lg:flex">
+      <div className="aurora absolute inset-0 -z-10" aria-hidden />
       <span className="animate-fade"><Logo dark animate /></span>
       <div className="stagger flex flex-col gap-5">
         <p className="overline text-baton">{over}</p>
@@ -65,7 +66,7 @@ export function LoginPage() {
           <EvidenceQuote source="slack/#dev · 12 Oct 2026 · chunk 214" quote="“we hit the FCM cap again during the drive — switching to OneSignal tonight”" />
         </div>
       </BrandPanel>
-      <div className="flex flex-1 items-center justify-center px-4 py-10">
+      <div className="slide-from-right flex flex-1 items-center justify-center px-4 py-10">
         <div className="stagger flex w-full max-w-[400px] flex-col gap-[18px]">
           <div className="lg:hidden"><Logo /></div>
           <div>

@@ -47,7 +47,7 @@ export function Connections() {
       <PageHeader title="Connections" sub="Let Baton read straight from your tools with your own credentials. Read-only: Baton never writes back." />
       <Banner icon={Lock}>Each credential is encrypted with your workspace key and stored in your own database. After saving it is never shown again.</Banner>
       <QueryState loading={isLoading} error={error} />
-      <div className="grid items-start gap-4 xl:grid-cols-3">
+      <div className="reveal-list grid items-start gap-4 xl:grid-cols-3">
         {data.map(i => <ToolCard key={i.kind} i={i} />)}
       </div>
     </>
@@ -137,7 +137,7 @@ export function Billing() {
             </Card>
             <Card className="flex flex-col gap-3">
               <CardHeader title="Plans" />
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="reveal-list grid gap-3 sm:grid-cols-2">
                 {([['Free', b.freeLimits, 'Free', b.plan === 'FREE'], ['Team', b.teamLimits, `${money(b.teamPriceMinor, b.currency)} / month`, b.plan === 'TEAM']] as const).map(([name, l, price, current]) => (
                   <div key={name} className={cn('flex flex-col gap-1.5 rounded-xl border p-4', current && !b.unlimited ? 'border-brand-600 bg-brand-50' : 'border-line')}>
                     <span className="font-semibold">{name}</span>

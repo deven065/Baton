@@ -34,7 +34,7 @@ export function WorkspaceSettings() {
       <QueryState loading={isLoading} error={error} />
       {ws && (
         <>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="reveal-list grid gap-4 md:grid-cols-2">
             <Card className="flex flex-col gap-3">
               <CardHeader title={ws.name} sub={`Workspace name: ${ws.slug} · created ${fmtDate(ws.createdAt)}`} />
               <p className="text-small text-ink-700">{ws.people} active {ws.people === 1 ? 'person' : 'people'} · {ws.projects} project{ws.projects === 1 ? '' : 's'}</p>

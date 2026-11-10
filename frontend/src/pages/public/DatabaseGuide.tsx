@@ -73,7 +73,7 @@ export function DatabaseGuide() {
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="reveal-list grid gap-4 md:grid-cols-2">
           <Card className="flex flex-col gap-3">
             <h2 className="flex items-center gap-2 text-h3 font-semibold"><Database className="size-5 text-brand-600" aria-hidden />In your database</h2>
             <ul className="flex flex-col gap-2 text-small text-ink-700">
@@ -98,7 +98,7 @@ export function DatabaseGuide() {
             <h2 className="text-h2 font-semibold">What Baton needs</h2>
             <p className="text-small text-ink-500">Baton creates its own tables the first time it connects.</p>
           </div>
-          <ul className="grid gap-2 text-small text-ink-700 sm:grid-cols-2">
+          <ul className="reveal-list grid gap-2 text-small text-ink-700 sm:grid-cols-2">
             <li className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-verified" aria-hidden />PostgreSQL 14 or newer</li>
             <li className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-verified" aria-hidden />The pgvector extension available</li>
             <li className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-verified" aria-hidden />An empty <Code>public</Code> schema (a new database)</li>

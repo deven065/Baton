@@ -15,7 +15,8 @@ const STEPS = ['Company', 'Database', 'First admin'] as const;
 function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh bg-card">
-      <aside className="aurora hidden w-[520px] shrink-0 flex-col justify-between p-14 lg:flex">
+      <aside className="slide-panel relative isolate hidden w-[520px] shrink-0 flex-col justify-between overflow-hidden p-14 lg:flex">
+        <div className="aurora absolute inset-0 -z-10" aria-hidden />
         <span className="animate-fade"><Logo dark animate /></span>
         <div className="stagger flex flex-col gap-5">
           <p className="overline text-baton">Your data stays yours</p>
@@ -32,7 +33,7 @@ function Shell({ children }: { children: ReactNode }) {
         </div>
         <p className="text-caption text-inverse-muted">Team Bramhastra</p>
       </aside>
-      <main className="flex flex-1 items-start justify-center overflow-y-auto px-4 py-10 lg:items-center">{children}</main>
+      <main className="slide-from-right flex flex-1 items-start justify-center overflow-y-auto px-4 py-10 lg:items-center">{children}</main>
     </div>
   );
 }
@@ -41,6 +42,7 @@ export function SignupWizard() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
+  const [stepDir, setStepDir] = useState<'next' | 'back'>('next');
   const [company, setCompany] = useState('');
   const [slug, setSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
@@ -87,10 +89,12 @@ export function SignupWizard() {
       if (state === 'error') return setError({ message: 'Couldn’t check the name just now. The server may still be waking up: wait a few seconds and press Continue again.' });
       setSlug(effectiveSlug);
       setSlugTouched(true);
+      setStepDir('next');
       return setStep(1);
     }
     if (step === 1) {
       if (!/^(jdbc:)?postgres(ql)?:\/\//.test(dbUrl.trim())) return setError({ message: 'Paste a PostgreSQL connection URL (postgresql://…).', field: 'db' });
+      setStepDir('next');
       return setStep(2);
     }
     if (password.length < 12) return setError({ message: 'Use at least 12 characters.', field: 'password' });
@@ -137,17 +141,17 @@ export function SignupWizard() {
         </ol>
 
         {step === 0 && (
-          <>
+          <div key="step-0" className={cn('flex flex-col gap-5', stepDir === 'back' ? 'slide-from-left' : 'slide-from-right')}>
             <div><h1 className="text-h1 font-semibold">Create your workspace</h1><p className="mt-1 text-ink-500">One workspace per company, club or team.</p></div>
             <Field label="Company or team name">{id => <Input id={id} autoFocus value={company} onChange={e => { setCompany(e.target.value); setSlugState('idle'); }} placeholder="Acme Robotics" invalid={error?.field === 'company'} />}</Field>
             <Field label="Workspace name" hint={<p className="text-caption text-ink-500">People type this when they sign in. Lowercase letters, digits and hyphens.{slugState === 'free' && <span className="ml-1 text-verified">Available.</span>}</p>}>
               {id => <Input id={id} value={effectiveSlug} onChange={e => { setSlugTouched(true); setSlug(e.target.value.toLowerCase()); setSlugState('idle'); }} className="font-mono" placeholder="acme" invalid={error?.field === 'slug'} autoCapitalize="none" spellCheck={false} />}
             </Field>
-          </>
+          </div>
         )}
 
         {step === 1 && (
-          <>
+          <div key="step-1" className={cn('flex flex-col gap-5', stepDir === 'back' ? 'slide-from-left' : 'slide-from-right')}>
             <div><h1 className="text-h1 font-semibold">Connect your database</h1><p className="mt-1 text-ink-500">An <strong>empty</strong> PostgreSQL 14+ database with pgvector, in your own account.</p></div>
             <Banner icon={Database}>
               Easiest: create a free project on <a className="font-medium underline" href="https://neon.tech" target="_blank" rel="noreferrer">Neon</a> or{' '}
@@ -165,23 +169,23 @@ export function SignupWizard() {
               </div>
             </details>
             <p className="flex items-start gap-2 text-caption text-ink-500"><Lock className="mt-px size-3.5 shrink-0 text-verified" aria-hidden />The connection is encrypted before Baton stores it, and used only to read and write your workspace.</p>
-          </>
+          </div>
         )}
 
         {step === 2 && (
-          <>
+          <div key="step-2" className={cn('flex flex-col gap-5', stepDir === 'back' ? 'slide-from-left' : 'slide-from-right')}>
             <div><h1 className="text-h1 font-semibold">Your admin account</h1><p className="mt-1 text-ink-500">You’ll manage people, groups and projects in <span className="font-mono">{effectiveSlug}</span>.</p></div>
             <Field label="Your name">{id => <Input id={id} autoFocus autoComplete="name" value={name} onChange={e => setName(e.target.value)} />}</Field>
             <Field label="Work email">{id => <Input id={id} type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />}</Field>
             <Field label="Password" hint={<p className={cn('text-caption', password.length >= 12 ? 'text-verified' : 'text-ink-500')}>{password.length >= 12 ? 'Good length' : `At least 12 characters (${password.length})`}</p>}>
               {id => <Input id={id} type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} invalid={error?.field === 'password'} />}
             </Field>
-          </>
+          </div>
         )}
 
         {error && <Banner tone="conflict" icon={AlertTriangle}><span role="alert">{error.message}</span></Banner>}
         <div className="flex gap-2">
-          {step > 0 && <Button type="button" onClick={() => { setError(null); setStep(step - 1); }} disabled={busy}>Back</Button>}
+          {step > 0 && <Button type="button" onClick={() => { setError(null); setStepDir('back'); setStep(step - 1); }} disabled={busy}>Back</Button>}
           <Button kind="primary" size="lg" type="submit" className="flex-1" disabled={busy || slugState === 'checking'}>
             {slugState === 'checking' ? 'Checking the name…' : step < 2 ? 'Continue' : busy ? 'Setting up your database…' : 'Create workspace'}
           </Button>

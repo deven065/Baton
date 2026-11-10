@@ -44,13 +44,25 @@ const PAGE: Record<string, string> = {
   '/app/admin/audit': 'Audit log', '/app/admin/workspace': 'Workspace', '/app/admin/ai': 'AI', '/app/admin/connections': 'Connections', '/app/admin/billing': 'Billing', '/app/team': 'Team', '/app/risk': 'Knowledge risk', '/app/successors': 'Successors',
 };
 
+/**
+ * Tells the page transition which way to slide: further down the menu (or right along the tabs) comes in from the
+ * right, back up comes in from the left.
+ */
+function setNavDir(to: string) {
+  const order = NAV_ORDER();
+  const from = order.indexOf(window.location.pathname);
+  const target = order.indexOf(to);
+  document.documentElement.dataset.navDir = from >= 0 && target >= 0 && target < from ? 'back' : 'forward';
+}
+const NAV_ORDER = () => [...NAV_MAIN.map(n => n.to), NAV_TEAM.to, NAV_RISK.to, ...NAV_ADMIN.map(n => n.to), ...TABS.map(t => t.to)];
+
 function NavItem({ item, onClick }: { item: Nav; onClick?: () => void }) {
   const Icon = item.icon;
   return (
     <NavLink
       to={item.to}
       end={item.end}
-      onClick={onClick}
+      onClick={() => { setNavDir(item.to); onClick?.(); }}
       viewTransition
       className={({ isActive }) =>
         cn('nav-item group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-small font-medium transition-[background-color,color] duration-200',
@@ -184,7 +196,7 @@ function Notifications() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-50 mt-2 w-[340px] overflow-hidden rounded-xl border border-line bg-card shadow-pop">
+          <div className="animate-drop absolute right-0 z-50 mt-2 w-[340px] overflow-hidden rounded-xl border border-line bg-card shadow-pop">
             <p className="border-b border-line px-4 py-2.5 text-small font-semibold">Notifications</p>
             <ul className="max-h-[360px] overflow-y-auto">
               {items.map(i => (
@@ -213,20 +225,20 @@ export function AppShell() {
   const crumbs = [project, ...(inHandover && session?.handover ? ['Handover · ' + session.handover.departingName] : []), PAGE[pathname] ?? 'Baton'];
   return (
     <div className="flex min-h-dvh">
-      <aside className="sticky top-0 hidden h-dvh w-[248px] shrink-0 overflow-y-auto border-r border-line bg-card lg:block">
+      <aside className="slide-panel sticky top-0 hidden h-dvh w-[248px] shrink-0 overflow-y-auto border-r border-line bg-card lg:block">
         <Sidebar />
       </aside>
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
           <div className="absolute inset-0 bg-ink-900/40" onClick={() => setOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-[264px] overflow-y-auto bg-card shadow-pop">
+          <aside className="animate-drawer absolute inset-y-0 left-0 w-[264px] overflow-y-auto bg-card shadow-pop">
             <button type="button" aria-label="Close menu" onClick={() => setOpen(false)} className="absolute top-4 right-3 p-1 text-ink-500 cursor-pointer"><X className="size-5" /></button>
             <Sidebar onNavigate={() => setOpen(false)} />
           </aside>
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-line bg-card px-4 py-3 sm:px-8">
+        <header className="slide-from-top sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-line bg-card px-4 py-3 sm:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <button type="button" aria-label="Open menu" onClick={() => setOpen(true)} className="rounded p-1 text-ink-700 lg:hidden cursor-pointer"><Menu className="size-5" /></button>
             <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-small">
@@ -267,7 +279,7 @@ export function RecipientShell() {
   const navigate = useNavigate();
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-30 border-b border-line bg-card">
+      <header className="slide-from-top sticky top-0 z-30 border-b border-line bg-card">
         <div className="flex items-center justify-between gap-4 px-4 sm:px-10">
           <div className="flex min-w-0 items-center gap-7">
             <Link to="/handover" className="py-3"><Logo /></Link>
@@ -278,6 +290,7 @@ export function RecipientShell() {
                   to={t.to}
                   end={t.end}
                   viewTransition
+                  onClick={() => setNavDir(t.to)}
                   className={({ isActive }) => cn('border-b-2 px-3 py-5 text-small font-medium', isActive ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-900')}
                 >
                   {t.label}
@@ -297,7 +310,7 @@ export function RecipientShell() {
         </div>
         <nav aria-label="Handover sections" className="flex gap-1 overflow-x-auto px-2 md:hidden">
           {TABS.map(t => (
-            <NavLink key={t.to} to={t.to} end={t.end} viewTransition className={({ isActive }) => cn('border-b-2 px-3 py-2.5 text-small font-medium whitespace-nowrap', isActive ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500')}>
+            <NavLink key={t.to} to={t.to} end={t.end} viewTransition onClick={() => setNavDir(t.to)} className={({ isActive }) => cn('border-b-2 px-3 py-2.5 text-small font-medium whitespace-nowrap', isActive ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500')}>
               {t.label}
             </NavLink>
           ))}

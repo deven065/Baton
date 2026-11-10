@@ -50,7 +50,7 @@ export default function Dashboard() {
         right={<><Link to="/app/sources"><Button>Add a source</Button></Link><Button kind="primary" onClick={() => setStarting(true)}>Start a handover</Button></>}
       />
       {starting && <StartHandoverModal onClose={() => setStarting(false)} />}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="reveal-list grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Claims" value={String(summary?.total ?? '–')} note={summary ? `${summary.byStatus.VERIFIED ?? 0} verified · ${summary.byStatus.SINGLE_SOURCE ?? 0} single source` : 'No handover yet'} />
         <StatCard label="Claims to review" value={String(summary ? toReview : '–')} note={`${inferred} inferred · ${missing} missing evidence`} />
         <StatCard label="Open conflicts" value={String(summary ? conflicts : '–')} note={conflicts ? 'Blocking approval' : 'Nothing blocking'} valueClass={conflicts ? 'text-conflict' : undefined} />

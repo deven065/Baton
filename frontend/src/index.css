@@ -280,3 +280,48 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ─────────────────────────── Slides ─────────────────────────── */
+@keyframes from-left { from { opacity: 0; translate: -36px 0; } to { opacity: 1; translate: none; } }
+@keyframes from-right { from { opacity: 0; translate: 36px 0; } to { opacity: 1; translate: none; } }
+@keyframes from-top { from { opacity: 0; translate: 0 -100%; } to { opacity: 1; translate: none; } }
+@keyframes panel-left { from { opacity: 0.4; translate: -100% 0; } to { opacity: 1; translate: none; } }
+@keyframes drop { from { opacity: 0; translate: 0 -10px; scale: 0.98; } to { opacity: 1; translate: none; scale: none; } }
+@keyframes page-out-left { to { opacity: 0; translate: -40px 0; } }
+@keyframes page-out-right { to { opacity: 0; translate: 40px 0; } }
+@keyframes page-in-right { from { opacity: 0; translate: 48px 0; } to { opacity: 1; translate: none; } }
+@keyframes page-in-left { from { opacity: 0; translate: -48px 0; } to { opacity: 1; translate: none; } }
+
+@utility slide-from-left { animation: from-left 0.7s var(--ease-out-soft) both; }
+@utility slide-from-right { animation: from-right 0.7s var(--ease-out-soft) both; }
+@utility slide-from-top { animation: from-top 0.55s var(--ease-out-soft) both; }
+@utility slide-panel { animation: panel-left 0.85s var(--ease-out-soft) both; }
+@utility animate-drawer { animation: panel-left 0.4s var(--ease-out-soft) both; }
+@utility animate-drop { animation: drop 0.28s var(--ease-out-soft) both; transform-origin: top right; }
+
+@layer base {
+  /* A sliding step inside a cascading form keeps its own slide. */
+  .stagger > .slide-from-right { animation: from-right 0.5s var(--ease-out-soft) both; }
+  .stagger > .slide-from-left { animation: from-left 0.5s var(--ease-out-soft) both; }
+
+  /* Page changes slide with the direction of travel: further down the menu comes in from the right. */
+  ::view-transition-old(page) { animation: page-out-left 0.22s ease-in both; }
+  ::view-transition-new(page) { animation: page-in-right 0.45s var(--ease-out-soft) both; }
+  :root[data-nav-dir="back"]::view-transition-old(page) { animation-name: page-out-right; }
+  :root[data-nav-dir="back"]::view-transition-new(page) { animation-name: page-in-left; }
+
+  /* Cards slide in as they scroll into view, alternating sides (see setupReveal in main.tsx). */
+  .reveal-list > * {
+    opacity: 0;
+    translate: -32px 0;
+    transition: opacity 0.6s var(--ease-out-soft), translate 0.75s var(--ease-out-soft), box-shadow 0.25s, border-color 0.2s;
+  }
+  .reveal-list > *:nth-child(even) { translate: 32px 0; }
+  .reveal-list > *:nth-child(3n + 2) { transition-delay: 0.08s; }
+  .reveal-list > *:nth-child(3n + 3) { transition-delay: 0.16s; }
+  .reveal-list > *.revealed { opacity: 1; translate: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-list > * { opacity: 1 !important; translate: none !important; }
+}

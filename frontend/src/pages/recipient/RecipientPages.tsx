@@ -124,7 +124,7 @@ export function StartHere() {
             <section className="flex flex-col gap-5 rounded-2xl bg-inverse p-6 sm:p-8">
               <p className="overline text-baton">Start here · {v.roleLabel}</p>
               <h1 className="text-h1 font-semibold text-white">Welcome, {first}. Here’s what you’re picking up from {v.handover.departingName}.</h1>
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="reveal-list grid gap-3 md:grid-cols-3">
                 {[
                   ['Project', v.handover.project.name, v.handover.project.description],
                   ['Handover', v.handover.title, `${v.handover.scenario.toLowerCase()} exit`],
@@ -195,7 +195,7 @@ export function Ownership() {
               right={<><FilterChip active={filter === 'all'} onClick={() => setFilter('all')}>All</FilterChip><FilterChip active={filter === 'access'} onClick={() => setFilter('access')}>Access</FilterChip><FilterChip active={filter === 'unknown'} onClick={() => setFilter('unknown')}>No owner</FilterChip></>}
             />
             <Hidden n={v.hiddenCount} />
-            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <ul className="reveal-list grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {rows.map(c => (
                 <li key={c.id}>
                   <Card as="article" className="flex h-full flex-col gap-3">

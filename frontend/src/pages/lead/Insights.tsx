@@ -27,7 +27,7 @@ export function RiskRadar() {
       <QueryState loading={isLoading} error={error} />
       {data && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="reveal-list grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard label="Bus factor" value={String(data.busFactor)} note={data.busFactor <= 1 ? 'One person wrote half of what the project knows' : `${data.busFactor} people wrote half of what the project knows`} valueClass={data.busFactor <= 1 ? 'text-conflict' : data.busFactor === 2 ? 'text-inferred' : undefined} />
             <StatCard label="Single-source topics" value={String(data.topics.filter(t => t.soleSource).length)} note={`of ${data.topics.length} topics in the claims`} />
             <StatCard label="Access with one person" value={String(data.access.filter(a => a.sources.length === 1).length)} note="Accounts or keys only one person mentions" />
@@ -55,7 +55,7 @@ export function RiskRadar() {
           <div className="grid items-start gap-6 xl:grid-cols-[1fr_380px]">
             <section className="flex flex-col gap-3">
               <CardHeader title="Topics" sub="From reconstructed claims: who has written about each" right={<span className="flex gap-1.5"><FilterChip active={topicFilter === 'sole'} onClick={() => setTopicFilter('sole')}>One source</FilterChip><FilterChip active={topicFilter === 'quiet'} onClick={() => setTopicFilter('quiet')}>Quiet</FilterChip><FilterChip active={topicFilter === 'all'} onClick={() => setTopicFilter('all')}>All</FilterChip></span>} />
-              <ul className="grid gap-3 sm:grid-cols-2">
+              <ul className="reveal-list grid gap-3 sm:grid-cols-2">
                 {topics.map(t => (
                   <li key={t.label}>
                     <Card as="article" className={cn('flex h-full flex-col gap-2', t.soleSource && 'border-inferred/50')}>
@@ -97,7 +97,7 @@ export function Successors() {
     <>
       <PageHeader title="Successors" sub="How far each person taking over has got through their checklist, and what they’re still waiting on." right={<Link to="/app/share"><Button>Manage shares</Button></Link>} />
       <QueryState loading={isLoading} error={error} empty={data.length === 0} emptyText="Not shared with anyone yet." />
-      <ul className="grid gap-4 lg:grid-cols-2">
+      <ul className="reveal-list grid gap-4 lg:grid-cols-2">
         {data.map(s => (
           <li key={s.shareId}>
             <Card as="article" className="flex h-full flex-col gap-4">

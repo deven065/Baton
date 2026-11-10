@@ -84,6 +84,36 @@ function SplashGate() {
   return null;
 }
 
+/**
+ * Slides list items in as they scroll into view (each container marked .reveal-list). Items already on screen
+ * slide in straight away; the rest as they appear. Without IntersectionObserver everything simply shows.
+ */
+function setupReveal() {
+  const show = (el: Element) => el.classList.add('revealed');
+  if (!('IntersectionObserver' in window)) {
+    new MutationObserver(() => document.querySelectorAll('.reveal-list > *:not(.revealed)').forEach(show))
+      .observe(document.body, { childList: true, subtree: true });
+    return;
+  }
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (e.isIntersecting) { show(e.target); io.unobserve(e.target); }
+    }
+  }, { rootMargin: '0px 0px -6% 0px', threshold: 0.06 });
+  const watched = new WeakSet<Element>();
+  const scan = () => document.querySelectorAll('.reveal-list > *:not(.revealed)').forEach(el => {
+    if (!watched.has(el)) { watched.add(el); io.observe(el); }
+  });
+  let queued = false;
+  new MutationObserver(() => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; scan(); });
+  }).observe(document.body, { childList: true, subtree: true });
+  scan();
+}
+setupReveal();
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
