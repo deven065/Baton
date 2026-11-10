@@ -267,19 +267,55 @@ public class AdminService {
 
     @Transactional(readOnly = true)
     public List<AuditRow> audit(Long before, int limit, String action) {
+        return audit(new AuditFilter(before, limit, action == null ? List.of() : List.of(action), null, null, null, null));
+    }
+
+    /** Filters for the audit log; every field is optional. Dates are inclusive whole days in UTC. */
+    public record AuditFilter(Long before, int limit, List<String> actions, UUID actorId, java.time.LocalDate from,
+                              java.time.LocalDate to, String text) {
+    }
+
+    @Transactional(readOnly = true)
+    public List<AuditRow> audit(AuditFilter f) {
+        String search = f.text() == null ? "" : f.text().strip();
+        if (search.length() > 100) {
+            search = search.substring(0, 100);
+        }
+        // LIKE wildcards in the search are matched literally.
+        String text = search.isEmpty() ? null : "%" + search.toLowerCase(java.util.Locale.ROOT)
+                .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
         return jdbc.sql("""
                 SELECT a.id, a.at, a.actor_id, u.display_name, a.action, a.entity_type, a.entity_id, a.project_id,
                        a.details::text AS details
                 FROM audit_log a LEFT JOIN app_user u ON u.id = a.actor_id
                 WHERE (CAST(:before AS bigint) IS NULL OR a.id < :before)
-                  AND (CAST(:action AS varchar) IS NULL OR a.action = :action)
+                  AND (:anyAction OR a.action IN (:actions))
+                  AND (CAST(:actor AS uuid) IS NULL OR a.actor_id = :actor)
+                  AND (CAST(:from AS date) IS NULL OR a.at >= CAST(:from AS date))
+                  AND (CAST(:to AS date) IS NULL OR a.at < CAST(:to AS date) + 1)
+                  AND (CAST(:text AS varchar) IS NULL OR lower(a.details::text) LIKE :text
+                       OR lower(coalesce(u.display_name, '')) LIKE :text OR lower(a.action) LIKE :text
+                       OR lower(coalesce(a.entity_type, '')) LIKE :text)
                 ORDER BY a.id DESC LIMIT :limit
                 """)
-                .param("before", before).param("action", action).param("limit", Math.max(1, Math.min(limit, 200)))
+                .param("before", f.before()).param("anyAction", f.actions().isEmpty())
+                .param("actions", f.actions().isEmpty() ? List.of("") : f.actions()).param("actor", f.actorId())
+                .param("from", f.from()).param("to", f.to()).param("text", text)
+                .param("limit", Math.max(1, Math.min(f.limit(), 200)))
                 .query((rs, n) -> new AuditRow(rs.getLong("id"), rs.getTimestamp("at").toInstant(),
                         rs.getObject("actor_id", UUID.class), rs.getString("display_name"), rs.getString("action"),
                         rs.getString("entity_type"), rs.getObject("entity_id", UUID.class),
                         rs.getObject("project_id", UUID.class), rs.getString("details")))
                 .list();
+    }
+
+    public record AuditActionCount(String action, long count) {
+    }
+
+    /** Every kind of event this workspace has recorded, so the filter offers exactly what exists. */
+    @Transactional(readOnly = true)
+    public List<AuditActionCount> auditActions() {
+        return jdbc.sql("SELECT action, count(*) AS n FROM audit_log GROUP BY action ORDER BY action")
+                .query((rs, n) -> new AuditActionCount(rs.getString("action"), rs.getLong("n"))).list();
     }
 }

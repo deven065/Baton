@@ -1,13 +1,13 @@
-import { AlertTriangle, Check, Copy, KeyRound, Layers, Plus, Trash2, UserPlus, Users, X } from 'lucide-react';
+import { AlertTriangle, Check, Copy, Download, KeyRound, Layers, Plus, Search, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Chip, FilterChip, SensitivityChip } from '@/components/ui/badge';
+import { Chip, SensitivityChip } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Field, Input, Segmented } from '@/components/ui/form';
 import { Avatar, Banner, Card, IconTile, PageHeader, QueryState, Table, Td } from '@/components/ui/misc';
 import {
-  fmtDate, fmtDateTime, sens, useAdminProjects, useAdminUsers, useAudit, useCreateGroup, useCreateProject, useCreateUser,
+  fmtDate, fmtDateTime, sens, useAdminProjects, useAdminUsers, useAudit, useAuditActions, useCreateGroup, useCreateProject, useCreateUser,
   useDeleteGroup, useDirectory, useGroups, useResetPassword, useTeam, useTeamMutations, useUpdateUser,
-  type AdminUserDto, type SensitivityDto,
+  type AdminUserDto, type AuditFilter, type AuditRowDto, type SensitivityDto,
 } from '@/data/live';
 import { useSearchParams } from 'react-router-dom';
 import { useSession } from '@/lib/auth';
@@ -326,29 +326,139 @@ export function TeamPage() {
   );
 }
 
-const ACTIONS = ['', 'LOGIN', 'USER_CREATED', 'USER_UPDATED', 'PASSWORD_RESET', 'PROJECT_CREATED', 'MEMBER_ADDED', 'SOURCE_CREATED', 'RECONSTRUCT_REQUESTED', 'CLAIM_REVIEWED', 'CONFLICT_RESOLVED', 'GAP_ANSWERED', 'PREVIEW_AS'];
+/** Every event the server records, grouped the way an admin looks for them. */
+const AUDIT_GROUPS: { label: string; actions: Record<string, string> }[] = [
+  { label: 'Sign-in and accounts', actions: { LOGIN: 'Signed in', PASSWORD_CHANGED: 'Changed password', PASSWORD_RESET: 'Password reset by admin', PASSWORD_RESET_REQUESTED: 'Asked for a reset link' } },
+  { label: 'People and groups', actions: { USER_CREATED: 'Person added', USER_UPDATED: 'Person changed', GROUP_CREATED: 'Group created', GROUP_DELETED: 'Group deleted' } },
+  { label: 'Projects and teams', actions: { PROJECT_CREATED: 'Project created', MEMBER_ADDED: 'Team member added', MEMBER_REMOVED: 'Team member removed', MEMBER_ROLE_CHANGED: 'Team role changed' } },
+  { label: 'Sources', actions: { SOURCE_CREATED: 'Source added', SOURCE_INGESTED: 'Source read', SOURCE_SYNC_REQUESTED: 'Source synced again' } },
+  { label: 'Handover and review', actions: { HANDOVER_CREATED: 'Handover started', RECONSTRUCT_REQUESTED: 'Reconstruction started', RECONSTRUCTED: 'Reconstruction finished', CLAIM_ADDED: 'Claim added', CLAIM_REVIEWED: 'Claim reviewed', CONFLICT_RESOLVED: 'Conflict resolved', GAP_ANSWERED: 'Exit question answered', GAP_SKIPPED: 'Exit question skipped', PREVIEW_AS: 'Viewed as a recipient', HANDOVER_APPROVED: 'Version approved', HANDOVER_REOPENED: 'Handover reopened', VERSION_EXPORTED: 'Version exported' } },
+  { label: 'Sharing and successors', actions: { SHARE_CREATED: 'Shared', SHARE_VIEWED: 'Share opened', SHARE_ACKNOWLEDGED: 'Share acknowledged', SHARE_ASKED: 'Question asked', SHARE_QUESTION_SENT: 'Question sent to the person leaving', SHARE_REVOKED: 'Share revoked', SHARES_MOVED: 'Recipients moved to a new version' } },
+  { label: 'Workspace and settings', actions: { WORKSPACE_CREATED: 'Workspace created', AI_SETTINGS_CHANGED: 'AI provider changed', AI_SETTINGS_REMOVED: 'AI provider removed', INTEGRATION_CONNECTED: 'Tool connected', INTEGRATION_REMOVED: 'Tool disconnected', BILLING_CHECKOUT_STARTED: 'Upgrade started', PLAN_PAID: 'Plan paid', WORKSPACE_DISCONNECTED: 'Workspace disconnected' } },
+];
+const ACTION_LABEL: Record<string, string> = Object.assign({}, ...AUDIT_GROUPS.map(g => g.actions));
+const actionLabel = (a: string) => ACTION_LABEL[a] ?? a.charAt(0) + a.slice(1).toLowerCase().replace(/_/g, ' ');
+
+const NO_FILTER: AuditFilter = { actions: [], actor: '', from: '', to: '', q: '' };
+const selectClass = 'w-full rounded-lg border border-line-strong bg-card px-3 py-2.5 text-body text-ink-900 outline-none transition-colors focus:border-brand-600 focus:ring-3 focus:ring-brand-100 cursor-pointer';
+
+/** {"as":"…","claims":3} → "as: … · claims: 3" */
+function readableDetails(details: string) {
+  if (!details || details === '{}') return '—';
+  try {
+    const d = JSON.parse(details) as Record<string, unknown>;
+    return Object.entries(d).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join(' · ');
+  } catch {
+    return details;
+  }
+}
+
+function downloadCsv(rows: AuditRowDto[]) {
+  const cell = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const lines = [['Time (UTC)', 'Who', 'Event', 'Code', 'Details'].map(cell).join(',')];
+  for (const r of rows) lines.push([r.at, r.actorName ?? 'System', actionLabel(r.action), r.action, readableDetails(r.details)].map(cell).join(','));
+  const url = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: `audit-log-${new Date().toISOString().slice(0, 10)}.csv` });
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export function AuditLog() {
-  const [action, setAction] = useState('');
-  const { data = [], isLoading, error } = useAudit(action);
+  const [filter, setFilter] = useState<AuditFilter>(NO_FILTER);
+  const [search, setSearch] = useState('');
+  // Search as you type, without a request per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setFilter(f => (f.q === search ? f : { ...f, q: search })), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  const audit = useAudit(filter);
+  const counts = useAuditActions().data ?? [];
+  const people = useAdminUsers().data ?? [];
+  const rows = useMemo(() => audit.data?.pages.flat() ?? [], [audit.data]);
+  const countOf = (a: string) => counts.find(c => c.action === a)?.count ?? 0;
+  const known = new Set(Object.keys(ACTION_LABEL));
+  const others = counts.filter(c => !known.has(c.action));
+  const active = filter.actions.length > 0 || !!filter.actor || !!filter.from || !!filter.to || !!filter.q;
+  const set = (patch: Partial<AuditFilter>) => setFilter(f => ({ ...f, ...patch }));
+
+  // The event picker holds one event ("LOGIN") or a whole category ("group:2").
+  const eventValue = filter.actions.length === 0 ? ''
+    : filter.actions.length === 1 ? filter.actions[0]
+    : `group:${AUDIT_GROUPS.findIndex(g => Object.keys(g.actions).join() === filter.actions.join())}`;
+  const pickEvent = (v: string) => set({ actions: !v ? [] : v.startsWith('group:') ? Object.keys(AUDIT_GROUPS[Number(v.slice(6))].actions) : [v] });
+
   return (
     <>
-      <PageHeader title="Audit log" sub="Every sign-in, change, AI run and view, newest first. Stored in your company’s own database." />
-      <div className="flex flex-wrap gap-2" role="toolbar" aria-label="Event type">
-        {ACTIONS.map(a => <FilterChip key={a || 'all'} active={action === a} onClick={() => setAction(a)}>{a ? a.toLowerCase().replace(/_/g, ' ') : 'All events'}</FilterChip>)}
-      </div>
-      <QueryState loading={isLoading} error={error} empty={!isLoading && data.length === 0} emptyText="No events of this type yet." />
-      {data.length > 0 && (
+      <PageHeader title="Audit log" sub="Every sign-in, change, AI run and view, newest first. Stored in your company’s own database."
+        right={<Button kind="secondary" onClick={() => downloadCsv(rows)} disabled={rows.length === 0}><Download className="size-3.5" aria-hidden />Download CSV</Button>} />
+
+      <Card className="p-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_0.8fr_0.8fr]">
+          <Field label="Event">
+            {id => (
+              <select id={id} className={selectClass} value={eventValue} onChange={e => pickEvent(e.target.value)}>
+                <option value="">All events</option>
+                {AUDIT_GROUPS.map((g, i) => (
+                  <optgroup key={g.label} label={g.label}>
+                    <option value={`group:${i}`}>All {g.label.toLowerCase()}</option>
+                    {Object.entries(g.actions).map(([a, label]) => (
+                      <option key={a} value={a}>{label}{countOf(a) ? ` (${countOf(a)})` : ''}</option>
+                    ))}
+                  </optgroup>
+                ))}
+                {others.length > 0 && (
+                  <optgroup label="Other">
+                    {others.map(c => <option key={c.action} value={c.action}>{actionLabel(c.action)} ({c.count})</option>)}
+                  </optgroup>
+                )}
+              </select>
+            )}
+          </Field>
+          <Field label="Person">
+            {id => (
+              <select id={id} className={selectClass} value={filter.actor} onChange={e => set({ actor: e.target.value })}>
+                <option value="">Everyone</option>
+                {people.map(p => <option key={p.id} value={p.id}>{p.displayName}</option>)}
+              </select>
+            )}
+          </Field>
+          <Field label="From">{id => <Input id={id} type="date" value={filter.from} max={filter.to || undefined} onChange={e => set({ from: e.target.value })} />}</Field>
+          <Field label="To">{id => <Input id={id} type="date" value={filter.to} min={filter.from || undefined} onChange={e => set({ to: e.target.value })} />}</Field>
+        </div>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <div className="relative min-w-[240px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-400" aria-hidden />
+            <Input aria-label="Search the audit log" placeholder="Search names, events and details" value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          {active && (
+            <Button kind="ghost" onClick={() => { setFilter(NO_FILTER); setSearch(''); }}><X className="size-3.5" aria-hidden />Clear filters</Button>
+          )}
+        </div>
+      </Card>
+
+      <p className="text-small text-ink-500" aria-live="polite">
+        {audit.isLoading ? 'Loading…' : `${rows.length}${audit.hasNextPage ? '+' : ''} event${rows.length === 1 ? '' : 's'}${active ? ' match these filters' : ''}`}
+      </p>
+      <QueryState loading={audit.isLoading} error={audit.error} empty={!audit.isLoading && rows.length === 0}
+        emptyText={active ? 'No events match these filters.' : 'No events yet.'} />
+      {rows.length > 0 && (
         <Table label="Audit events" columns={[{ label: 'Time' }, { label: 'Who' }, { label: 'Event' }, { label: 'Details' }]}>
-          {data.map(r => (
+          {rows.map(r => (
             <tr key={r.id}>
               <Td className="whitespace-nowrap font-mono text-caption text-ink-500">{fmtDateTime(r.at)}</Td>
               <Td className="whitespace-nowrap text-ink-900">{r.actorName ?? 'System'}</Td>
-              <Td className="whitespace-nowrap"><Chip>{r.action.toLowerCase().replace(/_/g, ' ')}</Chip></Td>
-              <Td className="max-w-[460px] truncate font-mono text-caption" >{r.details === '{}' ? '—' : r.details}</Td>
+              <Td className="whitespace-nowrap"><Chip>{actionLabel(r.action)}</Chip></Td>
+              <Td className="max-w-[460px] truncate font-mono text-caption"><span title={r.details === '{}' ? undefined : r.details}>{readableDetails(r.details)}</span></Td>
             </tr>
           ))}
         </Table>
+      )}
+      {audit.hasNextPage && (
+        <div className="flex justify-center">
+          <Button kind="secondary" onClick={() => audit.fetchNextPage()} disabled={audit.isFetchingNextPage}>
+            {audit.isFetchingNextPage ? 'Loading…' : 'Load older events'}
+          </Button>
+        </div>
       )}
     </>
   );

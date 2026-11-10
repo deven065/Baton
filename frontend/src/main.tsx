@@ -7,6 +7,7 @@ import { AuthProvider, HOME, useAuth } from '@/lib/auth';
 import type { Role } from '@/data/types';
 import { ForgotPasswordPage, InvitePage, LoginPage, ResetPasswordPage } from '@/pages/auth/AuthPages';
 import { ChangePasswordPage, SignupWizard } from '@/pages/auth/Onboarding';
+import { AccountPage } from '@/pages/auth/Account';
 import Dashboard from '@/pages/lead/Dashboard';
 import Sources from '@/pages/lead/Sources';
 import Reconstruct from '@/pages/lead/Reconstruct';
@@ -129,6 +130,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/disconnected" element={<DisconnectedPage />} />
             <Route path="/change-password" element={<ChangePasswordPage />} />
+            <Route path="/account" element={<AccountPage />} />
             <Route path="/invite" element={<InvitePage />} />
 
             <Route path="/app" element={<RequireRole roles={['lead', 'admin']}><AppShell /></RequireRole>}>

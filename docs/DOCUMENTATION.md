@@ -106,7 +106,9 @@ source to members of those groups.
 - **Projects and teams**: admins create projects with a lead; leads manage their team. A project always has a lead,
   and nobody with an open handover can be removed.
 - **Audit log**: every important action (sign-ins, source uploads, reviews, approvals, shares, views, exports,
-  setting changes) is recorded in the company's own database and readable by its admins.
+  setting changes) is recorded in the company's own database and readable by its admins. Filter it by event or
+  category (every event type the workspace has recorded, with counts), person, date range and text; load older
+  events; download what is shown as CSV.
 - **Workspace page**: shows where the data lives; lets an admin **disconnect** the workspace (see §7).
 
 ### Handover workflow
@@ -155,6 +157,8 @@ source to members of those groups.
 - **Notifications bell**: exit answers and recipients opening or acknowledging the handover.
 - **Forgot password**: email link (when email is on), otherwise instructions to ask an admin.
 - **Keep me signed in**: when unticked, the session ends when the tab closes.
+- **Account menu**: the avatar at the top right shows who you are and opens **Account settings** (profile,
+  clearance, groups, change password), **Organisation settings** for admins, and **Sign out**.
 
 ### Organisation settings (admins)
 | Page | What it does |
@@ -572,7 +576,8 @@ All paths start with `/api`. Everything needs `Authorization: Bearer <token>` ex
 | POST | `/admin/users/{id}/reset-password` | admin | New temporary password |
 | GET, POST | `/admin/groups` | admin | |
 | DELETE | `/admin/groups/{id}` | admin | Refused while in use |
-| GET | `/admin/audit?before=&limit=&action=` | admin | |
+| GET | `/admin/audit?action=A,B&actor=&from=&to=&q=&before=&limit=` | admin | Event types (comma-separated), person, dates (YYYY-MM-DD, inclusive), text; page with `before` |
+| GET | `/admin/audit/actions` | admin | Every event type recorded, with counts |
 | GET | `/admin/projects` | admin | |
 | POST | `/projects` | admin | `{name, description?, leadUserId}` |
 | GET | `/projects/{id}/team` | lead, admin | |

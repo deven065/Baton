@@ -1,13 +1,12 @@
-import { AlertTriangle, CheckCircle2, Info, Lock, LogOut } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, Lock } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FocusShell } from '@/components/layout/shells';
+import { AccountMenu, FocusShell } from '@/components/layout/shells';
 import { SensitivityChip } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/form';
-import { Avatar, Banner, Card, EvidenceQuote, Progress, QueryState, StatusCircle } from '@/components/ui/misc';
+import { Banner, Card, EvidenceQuote, Progress, QueryState, StatusCircle } from '@/components/ui/misc';
 import { evidenceLabel, sens, useAnswerGapLive, useClaim, useGapList, type GapDto } from '@/data/live';
-import { useAuth, useSession } from '@/lib/auth';
+import { useSession } from '@/lib/auth';
 import { ApiError } from '@/lib/http';
 import { cn } from '@/lib/utils';
 
@@ -23,9 +22,7 @@ const SECRET = /(api[_-]?key|password|passwd|secret|token)\s*[:=]|sk-[a-z0-9]{12
 const open = (g: GapDto) => g.status === 'OPEN' || g.status === 'UNANSWERED';
 
 export default function ExitInterview() {
-  const { handover, user } = useSession();
-  const { signOut } = useAuth();
-  const navigate = useNavigate();
+  const { handover } = useSession();
   const q = useGapList(handover?.id);
   const gaps = [...(q.data ?? [])].sort((a, b) => a.priority - b.priority);
   const answer = useAnswerGapLive(handover?.id);
@@ -53,8 +50,7 @@ export default function ExitInterview() {
         <div className="flex items-center gap-4">
           <span className="hidden text-small text-ink-500 sm:inline">{done} of {gaps.length} answered</span>
           <Progress value={gaps.length ? done / gaps.length : 0} tone="bg-verified" className="w-[140px]" label="Questions answered" />
-          <Avatar initials={user.initials} tone={user.tone} />
-          <button type="button" aria-label="Sign out" onClick={() => { signOut(); navigate('/login'); }} className="text-ink-400 hover:text-ink-900 cursor-pointer"><LogOut className="size-4" /></button>
+          <AccountMenu />
         </div>
       }
     >

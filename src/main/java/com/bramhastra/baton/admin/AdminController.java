@@ -1,9 +1,11 @@
 package com.bramhastra.baton.admin;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -92,9 +94,22 @@ public class AdminController {
     @GetMapping("/audit")
     public List<AdminService.AuditRow> audit(@RequestParam(required = false) Long before,
                                              @RequestParam(defaultValue = "100") int limit,
-                                             @RequestParam(required = false) String action) {
+                                             @RequestParam(required = false) String action,
+                                             @RequestParam(required = false) UUID actor,
+                                             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+                                             @RequestParam(required = false) String q) {
         me();
-        return admin.audit(before, limit, action == null || action.isBlank() ? null : action);
+        // One event type, or several separated by commas (a category).
+        List<String> actions = action == null ? List.of()
+                : java.util.Arrays.stream(action.split(",")).map(String::strip).filter(a -> !a.isEmpty()).limit(60).toList();
+        return admin.audit(new AdminService.AuditFilter(before, limit, actions, actor, from, to, q));
+    }
+
+    @GetMapping("/audit/actions")
+    public List<AdminService.AuditActionCount> auditActions() {
+        me();
+        return admin.auditActions();
     }
 
     public record NewUserRequest(@NotBlank @Size(max = 120) String displayName,

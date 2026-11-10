@@ -1,5 +1,5 @@
 // Live data from the Spring Boot API. DTO shapes mirror the backend records (see root README "API").
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/http';
 import type { Sensitivity, Status } from './types';
 
@@ -223,7 +223,8 @@ export interface PersonDto { id: string; displayName: string; email: string }
 export const qa = {
   users: ['admin', 'users'] as const,
   groups: ['admin', 'groups'] as const,
-  audit: (action: string) => ['admin', 'audit', action] as const,
+  audit: (f: AuditFilter) => ['admin', 'audit', f] as const,
+  auditActions: ['admin', 'audit-actions'] as const,
   projects: ['admin', 'projects'] as const,
   team: (p: string) => ['team', p] as const,
   directory: ['directory'] as const,
@@ -231,10 +232,26 @@ export const qa = {
 
 export const useAdminUsers = () => useQuery({ queryKey: qa.users, queryFn: () => api<AdminUserDto[]>('/api/admin/users') });
 export const useGroups = () => useQuery({ queryKey: qa.groups, queryFn: () => api<GroupDto[]>('/api/admin/groups') });
-export const useAudit = (action = '') => useQuery({
-  queryKey: qa.audit(action),
-  queryFn: () => api<AuditRowDto[]>(`/api/admin/audit?limit=200${action ? `&action=${encodeURIComponent(action)}` : ''}`),
+export interface AuditFilter { actions: string[]; actor: string; from: string; to: string; q: string }
+export interface AuditActionCountDto { action: string; count: number }
+
+/** Audit events, newest first, 100 at a time; fetchNextPage loads older ones. */
+export const useAudit = (f: AuditFilter) => useInfiniteQuery({
+  queryKey: qa.audit(f),
+  initialPageParam: undefined as number | undefined,
+  queryFn: ({ pageParam }) => {
+    const p = new URLSearchParams({ limit: '100' });
+    if (f.actions.length) p.set('action', f.actions.join(','));
+    if (f.actor) p.set('actor', f.actor);
+    if (f.from) p.set('from', f.from);
+    if (f.to) p.set('to', f.to);
+    if (f.q.trim()) p.set('q', f.q.trim());
+    if (pageParam) p.set('before', String(pageParam));
+    return api<AuditRowDto[]>(`/api/admin/audit?${p}`);
+  },
+  getNextPageParam: last => (last.length === 100 ? last[last.length - 1].id : undefined),
 });
+export const useAuditActions = () => useQuery({ queryKey: qa.auditActions, queryFn: () => api<AuditActionCountDto[]>('/api/admin/audit/actions') });
 export const useAdminProjects = () => useQuery({ queryKey: qa.projects, queryFn: () => api<AdminProjectDto[]>('/api/admin/projects') });
 export const useTeam = (projectId?: string | null) => useQuery({ queryKey: qa.team(projectId ?? ''), queryFn: () => api<TeamMemberDto[]>(`/api/projects/${projectId}/team`), enabled: !!projectId });
 export const useDirectory = (enabled = true) => useQuery({ queryKey: qa.directory, queryFn: () => api<PersonDto[]>('/api/directory'), enabled });

@@ -128,6 +128,18 @@ class CompanyAdminApiTest {
         send(get("/api/admin/audit?limit=50"), admin, null).andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.action == 'USER_CREATED')]").exists())
                 .andExpect(jsonPath("$[?(@.action == 'PASSWORD_CHANGED')]").exists());
+        // Filters: several event types at once, one person, a date range and text; and every event type with counts.
+        String benId = JsonPath.read(send(get("/api/me"), again, null).andReturn().getResponse().getContentAsString(), "$.id");
+        send(get("/api/admin/audit?action=PASSWORD_CHANGED,LOGIN&actor=" + benId), admin, null).andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.action == 'PASSWORD_CHANGED')]").exists())
+                .andExpect(jsonPath("$[?(@.action == 'USER_CREATED')]").doesNotExist())
+                .andExpect(jsonPath("$[?(@.actorName != 'Ben Lead')]").doesNotExist());
+        send(get("/api/admin/audit?from=2000-01-01&to=2000-12-31"), admin, null).andExpect(jsonPath("$.length()").value(0));
+        send(get("/api/admin/audit").param("q", "ben lead"), admin, null).andExpect(jsonPath("$[0].actorName").value("Ben Lead"));
+        send(get("/api/admin/audit").param("q", "100%_sure"), admin, null).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        send(get("/api/admin/audit/actions"), admin, null).andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.action == 'USER_CREATED' && @.count >= 1)]").exists());
+        send(get("/api/admin/audit/actions"), again, null).andExpect(status().isForbidden());
     }
 
     @Test

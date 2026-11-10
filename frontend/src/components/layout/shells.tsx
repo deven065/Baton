@@ -1,6 +1,6 @@
 import {
   Database, Sparkles, Cable, CreditCard, Radar, TrendingUp,
-  AlertTriangle, FolderKanban, UsersRound, Bell, CheckSquare, ChevronDown, ChevronRight, Clock, Eye, FileText, Home, Layers, LogOut, Menu, Plug, Search, Share2, ShieldCheck, Users, X,
+  AlertTriangle, FolderKanban, UsersRound, Bell, CheckSquare, ChevronDown, ChevronRight, Clock, Eye, FileText, Home, Layers, LogOut, Menu, Plug, Search, Share2, Settings, ShieldCheck, UserCog, Users, X,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -216,8 +216,59 @@ function Notifications() {
   );
 }
 
+/** The avatar in the top right: who you are, your settings, and sign out. */
+export function AccountMenu() {
+  const { user, session, signOut } = useAuth();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+  if (!user) return null;
+  const item = 'flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-small text-ink-700 hover:bg-canvas hover:text-ink-900 cursor-pointer';
+  return (
+    <div className="relative">
+      <button type="button" aria-label={`Account menu for ${user.name}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 rounded-full p-0.5 hover:ring-2 hover:ring-brand-100 cursor-pointer">
+        <Avatar initials={user.initials} tone={user.tone} />
+        <ChevronDown className={cn('size-3.5 text-ink-400 transition-transform', open && 'rotate-180')} aria-hidden />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div role="menu" className="animate-drop absolute right-0 z-50 mt-2 w-[280px] overflow-hidden rounded-xl border border-line bg-card shadow-pop">
+            <div className="flex items-start gap-3 border-b border-line px-4 py-3.5">
+              <Avatar initials={user.initials} tone={user.tone} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-small font-semibold text-ink-900">{user.name}</p>
+                <p className="truncate text-caption text-ink-500">{user.email}</p>
+                <p className="mt-1 text-caption text-ink-500">{user.role} · {session?.workspace.name}</p>
+                <SensitivityChip level={user.clearance} className="mt-1.5" />
+              </div>
+            </div>
+            <div className="py-1">
+              <Link role="menuitem" to="/account" onClick={() => setOpen(false)} className={item}><UserCog className="size-4" aria-hidden />Account settings</Link>
+              {session?.isAdmin && (
+                <Link role="menuitem" to="/app/admin/workspace" onClick={() => setOpen(false)} className={item}><Settings className="size-4" aria-hidden />Organisation settings</Link>
+              )}
+            </div>
+            <div className="border-t border-line py-1">
+              <button role="menuitem" type="button" onClick={() => { setOpen(false); signOut(); navigate('/login'); }} className={cn(item, 'text-conflict hover:text-conflict')}>
+                <LogOut className="size-4" aria-hidden />Sign out
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function AppShell() {
-  const { user, session } = useAuth();
+  const { session } = useAuth();
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const project = session?.project?.name ?? session?.workspace.name ?? 'Workspace';
@@ -253,7 +304,7 @@ export function AppShell() {
           <div className="flex items-center gap-3">
             <HeaderSearch />
             <Notifications />
-            {user && <Avatar initials={user.initials} tone={user.tone} />}
+            <AccountMenu />
           </div>
         </header>
         <main key={pathname} className="page stagger flex flex-col gap-6 p-4 sm:p-8">
@@ -274,9 +325,8 @@ const TABS = [
 
 export function RecipientShell() {
   const location = useLocation();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { view } = useCurrentShare();
-  const navigate = useNavigate();
   return (
     <div className="min-h-dvh">
       <header className="slide-from-top sticky top-0 z-30 border-b border-line bg-card">
@@ -301,11 +351,7 @@ export function RecipientShell() {
           <div className="flex items-center gap-3">
             {view.data && <span className="hidden items-center gap-1.5 text-caption text-ink-500 sm:flex" title={`sha256 ${view.data.sha256}`}><ShieldCheck className="size-3.5 text-verified" aria-hidden />Approved v{view.data.versionNo} · {fmtDate(view.data.approvedAt)}</span>}
             {user && <SensitivityChip level={user.clearance} />}
-            {user && (
-              <button type="button" aria-label="Sign out" title="Sign out" onClick={() => { signOut(); navigate('/login'); }} className="cursor-pointer">
-                <Avatar initials={user.initials} tone={user.tone} />
-              </button>
-            )}
+            <AccountMenu />
           </div>
         </div>
         <nav aria-label="Handover sections" className="flex gap-1 overflow-x-auto px-2 md:hidden">

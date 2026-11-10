@@ -28,7 +28,7 @@ export function RiskRadar() {
       {data && (
         <>
           <div className="reveal-list grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard label="Bus factor" value={String(data.busFactor)} note={data.busFactor <= 1 ? 'One person wrote half of what the project knows' : `${data.busFactor} people wrote half of what the project knows`} valueClass={data.busFactor <= 1 ? 'text-conflict' : data.busFactor === 2 ? 'text-inferred' : undefined} />
+            <StatCard label="Bus factor (key-person risk)" value={String(data.busFactor)} note={data.busFactor <= 1 ? 'Fewest people who wrote half of what the project knows: if this one person leaves, half the knowledge goes with them' : `Fewest people who wrote half of what the project knows: ${data.busFactor} people`} valueClass={data.busFactor <= 1 ? 'text-conflict' : data.busFactor === 2 ? 'text-inferred' : undefined} />
             <StatCard label="Single-source topics" value={String(data.topics.filter(t => t.soleSource).length)} note={`of ${data.topics.length} topics in the claims`} />
             <StatCard label="Access with one person" value={String(data.access.filter(a => a.sources.length === 1).length)} note="Accounts or keys only one person mentions" />
             <StatCard label="Quiet topics" value={String(data.topics.filter(t => t.quiet).length)} note="Nothing written in 60 days" />

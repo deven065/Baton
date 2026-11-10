@@ -268,6 +268,8 @@ class RbacMatrixTest {
         c.add(new Call(HttpMethod.POST, "/api/admin/groups", Map.of("name", "probe-group"), admin, false));
         c.add(new Call(HttpMethod.DELETE, "/api/admin/groups/" + group, null, admin, false));
         c.add(new Call(HttpMethod.GET, "/api/admin/audit", null, admin, false));
+        c.add(new Call(HttpMethod.GET, "/api/admin/audit?action=LOGIN,USER_CREATED&q=a&from=2026-01-01", null, admin, false));
+        c.add(new Call(HttpMethod.GET, "/api/admin/audit/actions", null, admin, false));
         c.add(new Call(HttpMethod.GET, "/api/admin/projects", null, admin, false));
         c.add(new Call(HttpMethod.GET, "/api/admin/workspace", null, admin, false));
         c.add(new Call(HttpMethod.POST, "/api/admin/workspace/disconnect", Map.of("confirm", "demo", "password", "anything-at-all"), admin, false));
