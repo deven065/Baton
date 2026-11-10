@@ -48,11 +48,11 @@ export function Checkbox({ checked, onChange, label, id, className }: { checked:
       <span
         aria-hidden
         className={cn(
-          'mt-px grid size-4 shrink-0 place-items-center rounded border-[1.5px] peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600',
+          'mt-px grid size-4 shrink-0 place-items-center rounded border-[1.5px] transition-[background-color,border-color,scale] duration-200 ease-out active:scale-90 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600',
           checked ? 'bg-brand-600 border-brand-600' : 'bg-card border-line-strong',
         )}
       >
-        {checked && <Check className="size-3 text-white" strokeWidth={3} />}
+        {checked && <Check className="check-draw size-3 text-white" strokeWidth={3} />}
       </span>
       {label && <span className="text-small text-ink-700">{label}</span>}
     </label>
@@ -70,17 +70,23 @@ export function Radio({ checked, onChange, name, children }: { checked: boolean;
       <input type="radio" name={name} checked={checked} onChange={onChange} className="peer sr-only" />
       <span
         aria-hidden
-        className={cn('mt-0.5 size-[18px] shrink-0 rounded-full bg-card peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600', checked ? 'border-[5px] border-brand-600' : 'border-[1.5px] border-line-strong')}
+        className={cn('mt-0.5 size-[18px] shrink-0 rounded-full bg-card transition-[border-width,border-color] duration-200 ease-out peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600', checked ? 'border-[5px] border-brand-600' : 'border-[1.5px] border-line-strong')}
       />
       <span className="flex flex-col gap-0.5">{children}</span>
     </label>
   );
 }
 
-/** Segmented control (Day 1 / Week 1 / Month 1, sensitivity picker). */
+/** Segmented control (Day 1 / Week 1 / Month 1, sensitivity picker). The white thumb slides to the choice. */
 export function Segmented<T extends string>({ options, value, onChange, label }: { options: readonly T[]; value: T; onChange: (v: T) => void; label: string }) {
+  const i = Math.max(0, options.indexOf(value));
   return (
-    <div role="radiogroup" aria-label={label} className="flex gap-0.5 rounded-lg bg-subtle p-[3px]">
+    <div role="radiogroup" aria-label={label} className="relative flex rounded-lg bg-subtle p-[3px]">
+      <span
+        aria-hidden
+        className="absolute top-[3px] bottom-[3px] rounded-md bg-card shadow-card transition-[left] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+        style={{ left: `calc(3px + (100% - 6px) * ${i} / ${options.length})`, width: `calc((100% - 6px) / ${options.length})` }}
+      />
       {options.map(o => (
         <button
           key={o}
@@ -88,10 +94,7 @@ export function Segmented<T extends string>({ options, value, onChange, label }:
           role="radio"
           aria-checked={o === value}
           onClick={() => onChange(o)}
-          className={cn(
-            'flex-1 rounded-md px-3 py-1.5 text-small font-medium cursor-pointer transition-colors',
-            o === value ? 'bg-card text-ink-900 shadow-card' : 'text-ink-500 hover:text-ink-900',
-          )}
+          className={cn('relative z-10 flex-1 rounded-md px-3 py-1.5 text-small font-medium cursor-pointer transition-colors duration-200', o === value ? 'text-ink-900' : 'text-ink-500 hover:text-ink-900')}
         >
           {o}
         </button>

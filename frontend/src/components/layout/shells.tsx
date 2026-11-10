@@ -51,11 +51,13 @@ function NavItem({ item, onClick }: { item: Nav; onClick?: () => void }) {
       to={item.to}
       end={item.end}
       onClick={onClick}
+      viewTransition
       className={({ isActive }) =>
-        cn('flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-small font-medium transition-colors', isActive ? 'bg-brand-50 text-brand-700' : 'text-ink-700 hover:bg-canvas')
+        cn('nav-item group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-small font-medium transition-[background-color,color] duration-200',
+          isActive ? 'is-active bg-brand-50 text-brand-700' : 'text-ink-700 hover:bg-canvas')
       }
     >
-      <Icon className="size-[18px] text-ink-500" aria-hidden />
+      <Icon className="size-[18px] text-ink-500 transition-transform duration-300 ease-out group-hover:-translate-y-px group-[.is-active]:text-brand-600" aria-hidden />
       <span className="flex-1">{item.label}</span>
       {item.demo && <span className="rounded bg-subtle px-1 text-[10px] font-medium text-ink-400" title="Shows demo data until this API exists">demo</span>}
       {!!item.count && <span className="text-caption text-ink-500">{item.count}</span>}
@@ -242,7 +244,7 @@ export function AppShell() {
             {user && <Avatar initials={user.initials} tone={user.tone} />}
           </div>
         </header>
-        <main key={pathname} className="stagger flex flex-col gap-6 p-4 sm:p-8">
+        <main key={pathname} className="page stagger flex flex-col gap-6 p-4 sm:p-8">
           <Outlet />
         </main>
       </div>
@@ -275,6 +277,7 @@ export function RecipientShell() {
                   key={t.to}
                   to={t.to}
                   end={t.end}
+                  viewTransition
                   className={({ isActive }) => cn('border-b-2 px-3 py-5 text-small font-medium', isActive ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-900')}
                 >
                   {t.label}
@@ -294,13 +297,13 @@ export function RecipientShell() {
         </div>
         <nav aria-label="Handover sections" className="flex gap-1 overflow-x-auto px-2 md:hidden">
           {TABS.map(t => (
-            <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => cn('border-b-2 px-3 py-2.5 text-small font-medium whitespace-nowrap', isActive ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500')}>
+            <NavLink key={t.to} to={t.to} end={t.end} viewTransition className={({ isActive }) => cn('border-b-2 px-3 py-2.5 text-small font-medium whitespace-nowrap', isActive ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500')}>
               {t.label}
             </NavLink>
           ))}
         </nav>
       </header>
-      <main key={location.pathname} className="stagger mx-auto flex max-w-[1120px] flex-col gap-6 px-4 py-6 sm:py-8">
+      <main key={location.pathname} className="page stagger mx-auto flex max-w-[1120px] flex-col gap-6 px-4 py-6 sm:py-8">
         <Outlet />
       </main>
     </div>

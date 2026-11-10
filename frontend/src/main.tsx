@@ -74,7 +74,7 @@ function SplashGate() {
     if (loading) return;
     const splash = document.getElementById('splash');
     if (!splash) return;
-    const wait = SPLASH_SEEN ? 0 : Math.max(0, 1500 - performance.now());
+    const wait = SPLASH_SEEN ? 0 : Math.max(0, 1800 - performance.now());
     const t = window.setTimeout(() => {
       splash.classList.add('out');
       window.setTimeout(() => splash.remove(), 600);

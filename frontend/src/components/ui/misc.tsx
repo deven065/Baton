@@ -1,18 +1,22 @@
 import { AlertTriangle, Check, FileText, RefreshCw, X, type LucideIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-export function Logo({ dark, size = 28, big, animate }: { dark?: boolean; size?: number; big?: boolean; animate?: boolean }) {
-  const bg = dark ? '#FFFFFF' : '#0E1726';
-  const fg = dark ? '#0E1726' : '#FFFFFF';
+/** The Baton mark: a lowercase b whose stem is the baton and whose amber bowl is being handed on. */
+export function LogoMark({ size = 28, dark, animate, className }: { size?: number; dark?: boolean; animate?: boolean; className?: string }) {
   return (
-    <span className="inline-flex items-center gap-2.5">
-      <svg width={size} height={size} viewBox="0 0 28 28" fill="none" aria-hidden className={animate ? 'logo-draw' : undefined}>
-        <rect width="28" height="28" rx="8" fill={bg} />
-        <path d="M8.5 19.5 L19.5 8.5" stroke={fg} strokeWidth="4" strokeLinecap="round" />
-        <circle cx="20.5" cy="19.5" r="2.5" fill="#E8A33D" />
-      </svg>
-      <span className={cn('font-semibold tracking-tight', big ? 'text-h1' : 'text-h2', dark ? 'text-white' : 'text-ink-900')}>Baton</span>
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden className={cn('logo-mark', animate && 'logo-draw', className)}>
+      <path className="logo-stem" d="M7.25 4.5V26.5" stroke={dark ? '#FFFFFF' : '#0E1726'} strokeWidth="5.5" strokeLinecap="round" />
+      <path className="logo-bowl" d="M13.32 14.3A7 7 0 1 1 13.32 24.7" stroke="#E8A33D" strokeWidth="5.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function Logo({ dark, size = 28, big, animate }: { dark?: boolean; size?: number; big?: boolean; animate?: boolean }) {
+  return (
+    <span className="logo inline-flex items-center gap-2">
+      <LogoMark size={size} dark={dark} animate={animate} />
+      <span className={cn('logo-word font-semibold tracking-[-0.035em]', big ? 'text-h1' : 'text-[21px] leading-7', dark ? 'text-white' : 'text-ink-900')}>baton</span>
     </span>
   );
 }
@@ -136,7 +140,21 @@ export function DemoNotice({ what }: { what: string }) {
 
 /** Loading / error / empty placeholder for API-backed sections. */
 export function QueryState({ loading, error, empty, emptyText = 'Nothing here yet.' }: { loading?: boolean; error?: unknown; empty?: boolean; emptyText?: string }) {
-  if (loading) return <p role="status" className="p-6 text-center text-small text-ink-500">Loading…</p>;
+  if (loading) {
+    return (
+      <div role="status" aria-label="Loading" className="flex flex-col gap-3 py-2">
+        {[92, 76, 84].map((w, i) => (
+          <div key={i} className="flex items-center gap-3 rounded-xl border border-line bg-card p-4">
+            <span className="skeleton size-9 shrink-0 rounded-lg" />
+            <span className="flex flex-1 flex-col gap-2">
+              <span className="skeleton h-3 rounded" style={{ width: `${w}%` }} />
+              <span className="skeleton h-2.5 rounded" style={{ width: `${w - 38}%` }} />
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
   if (error) return <p role="alert" className="p-6 text-center text-small text-conflict">{(error as Error).message || 'Something went wrong.'}</p>;
   if (empty) return <p className="p-6 text-center text-small text-ink-500">{emptyText}</p>;
   return null;
@@ -169,10 +187,11 @@ export function EvidenceQuote({ source, quote, matched = true, className }: { so
 }
 
 export function StatCard({ label, value, note, valueClass }: { label: string; value: string; note: string; valueClass?: string }) {
+  const shown = useCountUp(value);
   return (
     <Card className="flex flex-col gap-1">
       <p className="text-small font-medium text-ink-500">{label}</p>
-      <p className={cn('text-stat font-semibold tracking-tight', valueClass)}>{value}</p>
+      <p className={cn('text-stat font-semibold tracking-tight tabular-nums', valueClass)}>{shown}</p>
       <p className="text-caption font-normal text-ink-500">{note}</p>
     </Card>
   );
@@ -216,4 +235,29 @@ export function Table({ columns, children, label }: { columns: { label: string; 
 }
 export function Td({ children, className }: { children?: ReactNode; className?: string }) {
   return <td className={cn('px-4 py-3 align-middle text-ink-700', className)}>{children}</td>;
+}
+
+/** Counts a whole number up from 0 when it first appears (and glides when it changes). Other values pass through. */
+function useCountUp(value: string) {
+  const target = /^\d{1,7}$/.test(value) ? Number(value) : null;
+  const [n, setN] = useState(target ?? 0);
+  const from = useRef(0);
+  useEffect(() => {
+    if (target === null) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setN(target); from.current = target; return; }
+    const start = performance.now();
+    const begin = from.current;
+    const dur = 700 + Math.min(500, Math.abs(target - begin) * 8);
+    let raf = 0;
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - start) / dur);
+      const eased = 1 - Math.pow(1 - k, 3);
+      setN(Math.round(begin + (target - begin) * eased));
+      if (k < 1) raf = requestAnimationFrame(tick);
+      else from.current = target;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  return target === null ? value : String(n);
 }

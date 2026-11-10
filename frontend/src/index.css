@@ -166,10 +166,14 @@
 @utility animate-pop { animation: pop 0.45s var(--ease-out-soft) both; }
 @utility animate-float { animation: float 6s ease-in-out 1.2s infinite; }
 
-/* The logo draws itself: the baton stroke, then the amber dot. */
+/* The logo draws itself: the stem goes down, then the amber bowl is passed around it. */
+@keyframes draw-len {
+  from { stroke-dashoffset: var(--len); }
+  to { stroke-dashoffset: 0; }
+}
 @utility logo-draw {
-  & path { stroke-dasharray: 24; animation: draw 0.7s var(--ease-out-soft) 0.15s both; }
-  & circle { transform-box: fill-box; transform-origin: center; animation: dot-in 0.5s var(--ease-spring) 0.7s both; }
+  & .logo-stem { --len: 23; stroke-dasharray: 23; animation: draw-len 0.55s var(--ease-out-soft) 0.1s both; }
+  & .logo-bowl { --len: 34; stroke-dasharray: 34; animation: draw-len 0.75s var(--ease-out-soft) 0.45s both; }
 }
 
 /* Slowly drifting glow behind the dark brand panels. */
@@ -182,6 +186,75 @@
   background-size: 140% 140%, 140% 140%, 120% 120%;
   background-repeat: no-repeat;
   animation: aurora 18s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from { background-position: 150% 0; }
+  to { background-position: -50% 0; }
+}
+@keyframes tick {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes bowl-swing {
+  0%, 100% { rotate: 0deg; }
+  40% { rotate: -14deg; }
+  70% { rotate: 6deg; }
+}
+@keyframes page-out {
+  to { opacity: 0; translate: 0 -6px; }
+}
+
+/* Placeholder blocks while data loads. */
+@utility skeleton {
+  background: linear-gradient(90deg, var(--color-subtle) 25%, #f7f8fa 45%, var(--color-subtle) 65%);
+  background-size: 250% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* A check mark that draws itself. */
+@utility check-draw {
+  & path, & polyline { stroke-dasharray: 24; animation: tick 0.35s var(--ease-out-soft) both; }
+}
+
+/* Page changes: the old page fades up and away; the new one cascades in (see .stagger). */
+@layer base {
+  .page { view-transition-name: page; }
+  ::view-transition-old(page) { animation: page-out 0.18s ease-in both; }
+  ::view-transition-new(page) { animation: none; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.2s; }
+
+  /* The logo's bowl swings a little on hover, like a baton being offered. */
+  .logo-bowl { transform-box: fill-box; transform-origin: 0% 50%; }
+  a:hover .logo-bowl, .logo:hover .logo-bowl { animation: bowl-swing 0.7s var(--ease-out-soft); }
+
+  /* Active item in the sidebar gets a brand bar that grows in. */
+  .nav-item::before {
+    content: ""; position: absolute; left: -16px; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0;
+    background: var(--color-brand-600); scale: 1 0; transition: scale 0.3s var(--ease-out-soft);
+  }
+  .nav-item.is-active::before { scale: 1 1; }
+
+  /* Cards in lists lift slightly under the pointer. */
+  article.shadow-card { transition: translate 0.25s var(--ease-out-soft), box-shadow 0.25s var(--ease-out-soft), border-color 0.2s; }
+  article.shadow-card:hover { translate: 0 -2px; box-shadow: 0 10px 24px rgb(14 23 38 / 0.08), 0 1px 3px rgb(14 23 38 / 0.05); }
+
+  /* Table rows arrive one after another. */
+  tbody > tr { animation: rise 0.45s var(--ease-out-soft) both; }
+  tbody > tr:nth-child(1) { animation-delay: 0.05s; }
+  tbody > tr:nth-child(2) { animation-delay: 0.09s; }
+  tbody > tr:nth-child(3) { animation-delay: 0.13s; }
+  tbody > tr:nth-child(4) { animation-delay: 0.17s; }
+  tbody > tr:nth-child(5) { animation-delay: 0.21s; }
+  tbody > tr:nth-child(6) { animation-delay: 0.25s; }
+  tbody > tr:nth-child(n + 7) { animation-delay: 0.29s; }
+  tbody > tr { transition: background-color 0.15s ease-out; }
+
+  /* Inputs: a soft glow when focused. */
+  input, textarea, select { transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out; }
+  input:focus-visible, textarea:focus-visible, select:focus-visible { box-shadow: 0 0 0 4px rgb(52 70 212 / 0.12); }
+
+  html { scroll-behavior: smooth; }
 }
 
 @layer base {

@@ -20,19 +20,19 @@
         font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #fff;
       }
       #splash .mark { display: flex; flex-direction: column; align-items: center; gap: 18px; }
-      #splash .row { display: flex; align-items: center; gap: 14px; }
-      #splash svg { width: 56px; height: 56px; filter: drop-shadow(0 10px 30px rgb(52 70 212 / 0.45)); animation: s-pop .6s cubic-bezier(.22,1,.36,1) both; }
-      #splash path { stroke-dasharray: 24; animation: s-draw .7s cubic-bezier(.22,1,.36,1) .25s both; }
-      #splash circle { transform-box: fill-box; transform-origin: center; animation: s-dot .55s cubic-bezier(.34,1.56,.64,1) .8s both; }
-      #splash .word { font-size: 34px; font-weight: 600; letter-spacing: -0.02em; animation: s-rise .6s cubic-bezier(.22,1,.36,1) .35s both; }
-      #splash .tag { font-size: 14px; color: #9aa4b5; animation: s-rise .6s cubic-bezier(.22,1,.36,1) .6s both; }
-      #splash .bar { width: 160px; height: 2px; border-radius: 2px; overflow: hidden; background: rgb(255 255 255 / 0.08); animation: s-rise .5s ease .8s both; }
+      #splash .row { display: flex; align-items: center; gap: 12px; }
+      #splash svg { width: 60px; height: 60px; overflow: visible; filter: drop-shadow(0 12px 32px rgb(232 163 61 / 0.25)); }
+      #splash .stem { stroke-dasharray: 23; animation: s-draw23 .55s cubic-bezier(.22,1,.36,1) .15s both; }
+      #splash .bowl { stroke-dasharray: 34; animation: s-draw34 .8s cubic-bezier(.22,1,.36,1) .5s both; }
+      #splash .word { font-size: 40px; font-weight: 650; letter-spacing: -0.035em; animation: s-rise .6s cubic-bezier(.22,1,.36,1) .55s both; }
+      #splash .tag { font-size: 14px; color: #9aa4b5; animation: s-rise .6s cubic-bezier(.22,1,.36,1) .8s both; }
+      #splash .bar { width: 160px; height: 2px; border-radius: 2px; overflow: hidden; background: rgb(255 255 255 / 0.08); animation: s-rise .5s ease 1s both; }
       #splash .bar::after { content: ""; display: block; height: 100%; width: 40%; border-radius: 2px;
         background: linear-gradient(90deg, transparent, #e8a33d, transparent); animation: s-run 1.1s ease-in-out infinite; }
       #splash.out { animation: s-out .55s cubic-bezier(.22,1,.36,1) forwards; pointer-events: none; }
       @keyframes s-pop { from { opacity: 0; transform: scale(.7) rotate(-8deg); } to { opacity: 1; transform: none; } }
-      @keyframes s-draw { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
-      @keyframes s-dot { 0% { opacity: 0; transform: scale(0); } 70% { opacity: 1; transform: scale(1.3); } 100% { opacity: 1; transform: none; } }
+      @keyframes s-draw23 { from { stroke-dashoffset: 23; } to { stroke-dashoffset: 0; } }
+      @keyframes s-draw34 { from { stroke-dashoffset: 34; } to { stroke-dashoffset: 0; } }
       @keyframes s-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
       @keyframes s-run { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
       @keyframes s-out { to { opacity: 0; transform: scale(1.04); visibility: hidden; } }
@@ -45,12 +45,11 @@
     <div id="splash" role="status" aria-label="Loading Baton">
       <div class="mark">
         <div class="row">
-          <svg viewBox="0 0 28 28" fill="none" aria-hidden="true">
-            <rect width="28" height="28" rx="8" fill="#FFFFFF" />
-            <path d="M8.5 19.5 L19.5 8.5" stroke="#0E1726" stroke-width="4" stroke-linecap="round" />
-            <circle cx="20.5" cy="19.5" r="2.5" fill="#E8A33D" />
+          <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <path class="stem" d="M7.25 4.5V26.5" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round" />
+            <path class="bowl" d="M13.32 14.3A7 7 0 1 1 13.32 24.7" stroke="#E8A33D" stroke-width="5.5" stroke-linecap="round" />
           </svg>
-          <span class="word">Baton</span>
+          <span class="word">baton</span>
         </div>
         <span class="tag">Every handover sentence carries its receipt.</span>
         <span class="bar" aria-hidden="true"></span>
