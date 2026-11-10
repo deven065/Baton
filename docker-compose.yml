@@ -18,5 +18,24 @@ services:
       timeout: 3s
       retries: 20
 
+  # Browser admin for the database above: http://localhost:5050 (no login, local use only).
+  # Connect password for the "Baton (Docker)" server is baton.
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: baton-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: baton
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - baton-pgadmin:/var/lib/pgadmin
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      - postgres
+
 volumes:
   baton-pgdata:
+  baton-pgadmin:

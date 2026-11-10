@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Baton (Docker)",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "baton",
+      "Username": "baton",
+      "SSLMode": "prefer"
+    }
+  }
+}
