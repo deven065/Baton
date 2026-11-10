@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Field, Input, Radio } from '@/components/ui/form';
 import { Banner } from '@/components/ui/misc';
 import { useCreateHandover, useProject } from '@/data/live';
-import { useAuth, useSession } from '@/lib/auth';
+import { useAuth, useSession, chooseHandover } from '@/lib/auth';
 import { ApiError } from '@/lib/http';
 
 const SCENARIOS = [
@@ -39,7 +39,7 @@ export function StartHandoverModal({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     create.mutate(
       { departingUserId: person, title: title.trim() || `${chosen?.displayName ?? 'Handover'} — handover`, scenario },
-      { onSuccess: async () => { await refresh(); onClose(); navigate('/app/sources'); } },
+      { onSuccess: async h => { chooseHandover(h.id); await refresh(); onClose(); navigate('/app/sources'); } },
     );
   };
   const err = create.error instanceof ApiError ? create.error : null;

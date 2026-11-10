@@ -47,6 +47,13 @@ function tone(id: string) {
   return h % 6;
 }
 
+const HANDOVER_KEY = 'baton.handover';
+const chosenHandover = () => { try { return localStorage.getItem(HANDOVER_KEY); } catch { return null; } };
+/** Remembers which handover a lead is working on (this browser only). */
+export function chooseHandover(id: string) {
+  try { localStorage.setItem(HANDOVER_KEY, id); } catch { /* private mode: falls back to the newest */ }
+}
+
 /** Works out what this user does in Baton from what the API lets them see. */
 async function resolveSession(me: UserDto): Promise<Session> {
   // With a temporary password the API allows nothing but /api/me and the password change, so stop here;
@@ -58,7 +65,9 @@ async function resolveSession(me: UserDto): Promise<Session> {
   if (project) {
     // Leads see every handover; members only the ones where they are the person leaving.
     const list = await api<HandoverDto[]>(`/api/projects/${project.id}/handovers`);
-    const latest = [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+    // The handover picked in the sidebar switcher, if it still exists; otherwise the newest.
+    const chosen = list.find(h => h.id === chosenHandover());
+    const latest = chosen ?? [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
     if (project.myRole === 'PROJECT_LEAD') { role = 'lead'; handover = latest; }
     else if (latest) { role = 'leaver'; handover = latest; }
   }

@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -87,6 +88,21 @@ public class HandoverController {
                 aliases(departing, req.aliases()), me.id());
         audit.record(me.id(), "HANDOVER_CREATED", "handover", id, projectId,
                 Map.of("departingUserId", departing.getId().toString(), "scenario", scenario));
+        return view(handovers.findById(id).orElseThrow());
+    }
+
+    /** The lead renames a handover (for example a title typed by mistake). Recorded in the audit log. */
+    @PatchMapping("/handovers/{id}")
+    @Transactional
+    public HandoverView rename(@PathVariable UUID id, @Valid @RequestBody RenameHandover req) {
+        CurrentUser me = currentUser.get();
+        Handover h = handoverAccess.requireLead(me, id);
+        String title = req.title().strip();
+        if (title.isEmpty()) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, "Request validation failed", Map.of("title", "Enter a title"));
+        }
+        handovers.rename(id, title);
+        audit.record(me.id(), "HANDOVER_RENAMED", "handover", id, h.projectId(), Map.of("from", h.title(), "to", title));
         return view(handovers.findById(id).orElseThrow());
     }
 
@@ -174,6 +190,9 @@ public class HandoverController {
         List<String> list = new ArrayList<>();
         out.forEach(a -> list.add(a.toLowerCase(Locale.ROOT)));
         return list.stream().distinct().toList();
+    }
+
+    public record RenameHandover(@NotBlank @Size(max = 200) String title) {
     }
 
     public record CreateHandover(@NotNull UUID departingUserId, @NotBlank @Size(max = 200) String title,

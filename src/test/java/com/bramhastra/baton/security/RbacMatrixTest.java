@@ -219,6 +219,7 @@ class RbacMatrixTest {
         // the handover, claims and review
         c.add(new Call(HttpMethod.GET, hv, null, leadOrLeaver, false));
         c.add(new Call(HttpMethod.POST, hv + "/reconstruct", null, lead, false));
+        c.add(new Call(HttpMethod.PATCH, hv, Map.of("title", "Priya's handover"), lead, false));
         c.add(new Call(HttpMethod.GET, hv + "/runs/latest", null, leadOrLeaver, false));
         c.add(new Call(HttpMethod.GET, hv + "/claims", null, leadOrLeaver, false));
         c.add(new Call(HttpMethod.GET, hv + "/gaps", null, leadOrLeaver, false));

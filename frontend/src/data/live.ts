@@ -315,6 +315,14 @@ export function useCreateHandover(projectId?: string | null) {
   });
 }
 
+export function useRenameHandover() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (p: { id: string; title: string }) => api<HandoverDto>(`/api/handovers/${p.id}`, { method: 'PATCH', json: { title: p.title } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['handovers'] }),
+  });
+}
+
 // ───────────── phase 3: approval, versions, shares, recipient view ─────────────
 
 export interface GateCheckDto { key: string; ok: boolean; blocking: boolean; title: string; detail: string; count: number }

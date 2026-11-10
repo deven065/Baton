@@ -157,6 +157,8 @@ source to members of those groups.
 - **Notifications bell**: exit answers and recipients opening or acknowledging the handover.
 - **Forgot password**: email link (when email is on), otherwise instructions to ask an admin.
 - **Keep me signed in**: when unticked, the session ends when the tab closes.
+- **Handover switcher**: leads see the current handover at the top of the sidebar; click it to switch to another
+  handover in the project (remembered in this browser) or to **rename** it (recorded as `HANDOVER_RENAMED`).
 - **Account menu**: the avatar at the top right shows who you are and opens **Account settings** (profile,
   clearance, groups, change password), **Organisation settings** for admins, and **Sign out**.
 
@@ -602,6 +604,7 @@ All paths start with `/api`. Everything needs `Authorization: Bearer <token>` ex
 | Method | Path | Who | Notes |
 |---|---|---|---|
 | POST | `/projects/{id}/handovers` | lead | `{departingUserId, title, scenario, aliases?}` |
+| PATCH | `/handovers/{id}` | lead | Rename: `{title}` |
 | GET | `/projects/{id}/handovers` · `/handovers/{id}` | lead, leaver | |
 | POST | `/handovers/{id}/reconstruct` | lead | 202 `{jobId}` |
 | GET | `/handovers/{id}/runs/latest` | lead | |

@@ -53,6 +53,11 @@ public class HandoverRepository {
                 .param("p", projectId).query(this::map).list();
     }
 
+    /** Only the title changes; versions already approved keep the title they were frozen with. */
+    public void rename(UUID id, String title) {
+        jdbc.sql("UPDATE handover SET title = :t, updated_at = now() WHERE id = :id").param("id", id).param("t", title).update();
+    }
+
     /** Status change guarded by the expected current status, so two requests cannot both win. */
     public void transition(UUID id, HandoverStatus from, HandoverStatus to) {
         int n = jdbc.sql("""

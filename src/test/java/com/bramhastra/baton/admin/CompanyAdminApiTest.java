@@ -198,9 +198,16 @@ class CompanyAdminApiTest {
                 .andExpect(status().isConflict());
         send(delete("/api/projects/" + project + "/members/" + benId), ben, null).andExpect(status().isConflict());
         // ...and starts Cara's handover.
-        send(post("/api/projects/" + project + "/handovers"), ben,
-                Map.of("departingUserId", caraId, "title", "Cara's handover", "scenario", "PLANNED"))
-                .andExpect(status().isCreated());
+        String handover = JsonPath.read(send(post("/api/projects/" + project + "/handovers"), ben,
+                Map.of("departingUserId", caraId, "title", "cara@co.example", "scenario", "PLANNED"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
+        // A title typed by mistake can be fixed by the lead, and only the lead; the change is audited.
+        send(patch("/api/handovers/" + handover), ben, Map.of("title", "  Cara's handover  "))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.title").value("Cara's handover"));
+        send(patch("/api/handovers/" + handover), ben, Map.of("title", "   ")).andExpect(status().isBadRequest());
+        send(patch("/api/handovers/" + handover), admin, Map.of("title", "Admin was here")).andExpect(status().isNotFound());
+        send(get("/api/admin/audit?action=HANDOVER_RENAMED"), admin, null)
+                .andExpect(jsonPath("$[0].details").value(org.hamcrest.Matchers.containsString("cara@co.example")));
         // Someone with an open handover cannot be removed from the project.
         send(delete("/api/projects/" + project + "/members/" + caraId), ben, null)
                 .andExpect(status().isConflict());

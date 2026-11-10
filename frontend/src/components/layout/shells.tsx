@@ -1,15 +1,15 @@
 import {
   Database, Sparkles, Cable, CreditCard, Radar, TrendingUp,
-  AlertTriangle, FolderKanban, UsersRound, Bell, CheckSquare, ChevronDown, ChevronRight, Clock, Eye, FileText, Home, Layers, LogOut, Menu, Plug, Search, Share2, Settings, ShieldCheck, UserCog, Users, X,
+  AlertTriangle, FolderKanban, UsersRound, Bell, Check, CheckSquare, ChevronDown, ChevronRight, Clock, Eye, FileText, Home, Layers, LogOut, Menu, Pencil, Plug, Search, Share2, Settings, ShieldCheck, UserCog, Users, X,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { SensitivityChip } from '@/components/ui/badge';
-import { fmtDate, fmtDateTime, useGapList, useShares, useSummary } from '@/data/live';
+import { fmtDate, fmtDateTime, useGapList, useHandoverList, useRenameHandover, useShares, useSummary } from '@/data/live';
 import { useCurrentShare } from '@/pages/recipient/RecipientPages';
 import { Avatar, Kbd, Logo } from '@/components/ui/misc';
-import { useAuth } from '@/lib/auth';
+import { chooseHandover, useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 
 type Nav = { to: string; label: string; icon: LucideIcon; count?: number; end?: boolean; demo?: boolean };
@@ -77,6 +77,89 @@ function NavItem({ item, onClick }: { item: Nav; onClick?: () => void }) {
   );
 }
 
+const HANDOVER_STATUS: Record<string, string> = { DRAFT: 'Draft', RECONSTRUCTING: 'Reconstructing', IN_REVIEW: 'In review', APPROVED: 'Approved', SHARED: 'Shared', ARCHIVED: 'Archived' };
+
+/** For leads: which handover the workspace is showing, switch to another, or rename this one. */
+function HandoverSwitcher({ onNavigate }: { onNavigate?: () => void }) {
+  const { session, refresh } = useAuth();
+  const navigate = useNavigate();
+  const { data: list = [] } = useHandoverList(session?.project?.id);
+  const rename = useRenameHandover();
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState('');
+  const current = session?.handover;
+  if (!current) return <p className="overline px-2.5 pt-4 pb-1.5 text-ink-400">Handover · none yet</p>;
+
+  const pick = async (id: string) => {
+    setOpen(false);
+    if (id === current.id) return;
+    chooseHandover(id);
+    await refresh();
+    onNavigate?.();
+    navigate('/app');
+  };
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    await rename.mutateAsync({ id: current.id, title: title.trim() });
+    await refresh();
+    setEditing(false);
+  };
+
+  return (
+    // Above the nav items: their entrance animation gives each its own layer.
+    <div className="relative z-20 px-0.5 pt-4 pb-1">
+      <p className="overline px-2 pb-1.5 text-ink-400">Handover</p>
+      {editing ? (
+        <form onSubmit={save} className="flex flex-col gap-2 rounded-lg border border-line bg-canvas p-2">
+          <label htmlFor="handover-title" className="sr-only">Handover title</label>
+          <input id="handover-title" autoFocus maxLength={200} value={title} onChange={e => setTitle(e.target.value)}
+            className="w-full rounded-md border border-line-strong bg-card px-2 py-1.5 text-small outline-none focus:border-brand-600" />
+          {rename.error && <p role="alert" className="text-caption text-conflict">{(rename.error as Error).message}</p>}
+          <div className="flex gap-2">
+            <button type="submit" disabled={rename.isPending || !title.trim()} className="rounded-md bg-brand-600 px-2.5 py-1 text-caption font-medium text-white disabled:opacity-40 cursor-pointer">{rename.isPending ? 'Saving…' : 'Save'}</button>
+            <button type="button" onClick={() => setEditing(false)} className="rounded-md px-2.5 py-1 text-caption text-ink-700 hover:bg-subtle cursor-pointer">Cancel</button>
+          </div>
+        </form>
+      ) : (
+        <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(o => !o)}
+          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-canvas cursor-pointer">
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-small font-medium text-ink-900" title={current.title}>{current.title}</span>
+            <span className="block truncate text-caption text-ink-500">{current.departingName} · {HANDOVER_STATUS[current.status] ?? current.status}</span>
+          </span>
+          <ChevronDown className={cn('size-3.5 shrink-0 text-ink-400 transition-transform', open && 'rotate-180')} aria-hidden />
+        </button>
+      )}
+      {open && !editing && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="animate-drop absolute inset-x-0 z-50 mt-1 overflow-hidden rounded-xl border border-line bg-card shadow-pop">
+            <ul role="listbox" aria-label="Handovers in this project" className="max-h-[280px] overflow-y-auto py-1">
+              {list.map(h => (
+                <li key={h.id} role="option" aria-selected={h.id === current.id}>
+                  <button type="button" onClick={() => pick(h.id)} className="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-canvas cursor-pointer">
+                    <Check className={cn('mt-0.5 size-3.5 shrink-0 text-brand-600', h.id !== current.id && 'invisible')} aria-hidden />
+                    <span className="min-w-0">
+                      <span className="block truncate text-small text-ink-900">{h.title}</span>
+                      <span className="block text-caption text-ink-500">{h.departingName} · {HANDOVER_STATUS[h.status] ?? h.status} · {fmtDate(h.createdAt)}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button type="button" onClick={() => { setTitle(current.title); setEditing(true); setOpen(false); }}
+              className="flex w-full items-center gap-2 border-t border-line px-3 py-2.5 text-small text-ink-700 hover:bg-canvas cursor-pointer">
+              <Pencil className="size-3.5" aria-hidden />Rename this handover
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user, session, signOut } = useAuth();
   const navigate = useNavigate();
@@ -102,7 +185,9 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <nav aria-label="Main" className="stagger-side flex flex-col gap-1">
         {!isAdmin && (
           <>
-            <p className="overline px-2.5 pt-4 pb-1.5 text-ink-400">Handover · {session?.handover?.departingName ?? 'none yet'}</p>
+            {user?.appRole === 'lead'
+              ? <HandoverSwitcher onNavigate={onNavigate} />
+              : <p className="overline px-2.5 pt-4 pb-1.5 text-ink-400">Handover · {session?.handover?.departingName ?? 'none yet'}</p>}
             {NAV_MAIN.map(n => <NavItem key={n.to} item={{ ...n, count: counts[n.to] }} onClick={onNavigate} />)}
             {user?.appRole === 'lead' && <NavItem item={NAV_TEAM} onClick={onNavigate} />}
             {user?.appRole === 'lead' && <NavItem item={NAV_RISK} onClick={onNavigate} />}
