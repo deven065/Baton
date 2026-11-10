@@ -353,7 +353,7 @@ Baton works without any AI. AI only proposes claims; code does the rest.
 
 | Type | How | What is read |
 |---|---|---|
-| `CHAT_EXPORT` | Upload a Slack export `.zip` or a channel `.json` | Messages, authors, dates |
+| `CHAT_EXPORT` | Upload a chat export; the format is recognised from the file: **Slack** (export `.zip` or a channel `.json`), **WhatsApp** ("Export chat" `.txt`, or the `.zip` with media; Android and iPhone formats, day- or month-first dates), **Discord** (DiscordChatExporter `.json` or `.csv`, or a `.zip` of them) | Messages, authors, times; one document per channel per day |
 | `MEETING_NOTES` | Upload `.md`, `.txt`, `.pdf`, `.docx` | The notes |
 | `DOCUMENT` | Upload `.md`, `.txt`, `.pdf`, `.docx` | The document |
 | `TASK_CSV` | Upload a Jira, Trello or GitHub Projects CSV export | Tasks, owners, states |
@@ -693,9 +693,31 @@ decides each person's role. The Figma plugin that draws the product design (file
 ## 19. Testing
 
 ```bash
-./mvnw test          # 89 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
+./mvnw test          # 99 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
 cd frontend && npx tsc -b --noEmit && npm run build
 ```
+
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs both on every push and pull request, and adds the
+evaluation report to the run's summary page.
+
+### Evaluation against the planted facts
+
+`demo/annapurna/planted-facts.json` lists the **25 facts** planted across the seven demo sources, plus trust checks
+(injected instructions, five planted secrets, restricted facts). A fact is found when a claim of the expected type
+contains its key words, or for gaps, an exit question does.
+
+- **On every build:** `PlantedFactsEvaluationTest` reconstructs all seven sources in offline mode, scores them,
+  writes `target/evaluation-report.md` and fails if recall drops below the floor or any trust check fails.
+- **Against any running server**, for example with a real model:
+
+  ```bash
+  bash demo/load-demo.sh http://localhost:8080
+  python demo/evaluate.py http://localhost:8080 --report demo/evaluation-report.md
+  ```
+
+Latest result, offline rules ([`demo/evaluation-report.md`](../demo/evaluation-report.md)): **23 of 25 (92%)**, all
+checks pass. The two misses are plain statements with no signal word for the rules ("secrets live in the Render
+dashboard", "renewal is due on 2026-12-01"); a model is expected to find them.
 
 | Area | Tests |
 |---|---|
@@ -706,6 +728,7 @@ cd frontend && npx tsc -b --noEmit && npm run build
 | Workspaces and admin | `WorkspaceApiTest`, `DatabaseUrlTest`, `CompanyAdminApiTest`, `HardeningApiTest`, `SafeLogTest` |
 | Handover lifecycle | `HandoverStateMachineTest`, `LifecycleApiTest`, `HandoverFeaturesApiTest` |
 | AI, connectors, billing | `AiSettingsApiTest`, `ConnectorsAndBillingApiTest` (fake AI, Slack, Google and Razorpay servers) |
+| Evaluation | `PlantedFactsEvaluationTest` (25 planted facts, secrets, injection, restricted facts) |
 
 Tests cover, among others: workspace isolation, redaction before AI, quote verification, permission filtering,
 approval blocking, signed-export tampering, rate limits, disconnect, password links, plan limits and payment
@@ -716,9 +739,10 @@ webhook signatures.
 ## 20. Demo data
 
 Everything in the demo is synthetic. **Project Annapurna** is a made-up campus canteen pre-order app built by a
-college tech club ("Northfield Tech Club"). Its sources are in `demo/annapurna/` (weekly-sync notes, a Slack
-channel export, a task CSV, architecture notes, a vendor contract) with planted facts, a conflict (launch date) and
-gaps. See `demo/annapurna/README.md`.
+college tech club ("Northfield Tech Club"). Its seven sources are in `demo/annapurna/` (weekly-sync notes, a Slack
+channel export, a WhatsApp group export, a Discord channel export, a task CSV, architecture notes, a vendor
+contract) with 25 planted facts, a conflict (launch date), gaps and a fake API key that must be redacted. See
+`demo/annapurna/README.md` and the evaluation in section 19.
 
 | Person | Email | Clearance | Groups | Role |
 |---|---|---|---|---|
@@ -733,6 +757,7 @@ gaps. See `demo/annapurna/README.md`.
 ## 21. Project structure
 
 ```
+.github/workflows/ci.yml           Backend tests, evaluation and frontend build on every push
 .github/workflows/deploy-api.yml   Deploys the API to Render on push
 Dockerfile, docker-compose.yml     API image; local Postgres + pgvector
 demo/                              Synthetic demo sources and loader script

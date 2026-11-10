@@ -52,6 +52,11 @@ public class DemoFixture {
     }
 
     public DemoFixture loadSourcesAndReconstruct() throws Exception {
+        return loadSourcesAndReconstruct(false);
+    }
+
+    /** With chatApps, also the WhatsApp and Discord exports: all seven sources behind the 25 planted facts. */
+    public DemoFixture loadSourcesAndReconstruct(boolean chatApps) throws Exception {
         String neha = login("neha@annapurna.test");
         List<String> jobs = new ArrayList<>();
         jobs.add(upload(neha, "MEETING_NOTES", "Weekly sync", "INTERNAL", null, "2026-10-08-weekly-sync.md"));
@@ -59,6 +64,10 @@ public class DemoFixture {
         jobs.add(upload(neha, "TASK_CSV", "Jira export", "INTERNAL", null, "tasks.csv"));
         jobs.add(upload(neha, "DOCUMENT", "Architecture notes", "CONFIDENTIAL", "engineering", "architecture.md"));
         jobs.add(upload(neha, "DOCUMENT", "Vendor contract", "RESTRICTED", "operations", "vendor-contract.md"));
+        if (chatApps) {
+            jobs.add(upload(neha, "CHAT_EXPORT", "WhatsApp Annapurna Core", "INTERNAL", null, "WhatsApp Chat with Annapurna Core.txt"));
+            jobs.add(upload(neha, "CHAT_EXPORT", "Discord #design", "INTERNAL", null, "discord-design.json"));
+        }
         for (String job : jobs) {
             assertThat(awaitJob(neha, job)).isEqualTo("SUCCEEDED");
         }

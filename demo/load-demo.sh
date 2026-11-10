@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Loads the synthetic Project Annapurna sources into a running Baton backend and starts reconstruction.
 # Usage: demo/load-demo.sh [api-base-url]     (default http://localhost:8080)
+# Then score it: python demo/evaluate.py [api-base-url]
+# PROJECT=<id> loads into that project instead of the first one.
 # Needs: curl. Uses the seeded lead persona; the demo password defaults to the value in application.properties.
 set -euo pipefail
 
@@ -11,9 +13,9 @@ DIR="$(cd "$(dirname "$0")/annapurna" && pwd)"
 json_field() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" | head -1; }
 
 TOKEN=$(curl -sf -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
-  -d "{\"email\":\"neha@annapurna.test\",\"password\":\"$PASSWORD\"}" | json_field token)
+  -d "{\"workspace\":\"demo\",\"email\":\"neha@annapurna.test\",\"password\":\"$PASSWORD\"}" | json_field token)
 AUTH="Authorization: Bearer $TOKEN"
-PROJECT=$(curl -sf "$API/api/projects" -H "$AUTH" | json_field id)
+PROJECT="${PROJECT:-$(curl -sf "$API/api/projects" -H "$AUTH" | json_field id)}"
 echo "Project: $PROJECT"
 
 upload() { # type title sensitivity groups file
@@ -29,7 +31,9 @@ upload CHAT_EXPORT "Slack #dev" INTERNAL "" dev.json >/dev/null
 upload TASK_CSV "Jira export" INTERNAL "" tasks.csv >/dev/null
 upload DOCUMENT "Architecture notes" CONFIDENTIAL engineering architecture.md >/dev/null
 upload DOCUMENT "Vendor contract" RESTRICTED operations vendor-contract.md >/dev/null
-echo "Uploaded 5 sources; waiting for ingestion..."
+upload CHAT_EXPORT "WhatsApp Annapurna Core" INTERNAL "" "WhatsApp Chat with Annapurna Core.txt" >/dev/null
+upload CHAT_EXPORT "Discord #design" INTERNAL "" "discord-design.json" >/dev/null
+echo "Uploaded 7 sources; waiting for ingestion..."
 
 for _ in $(seq 1 60); do
   busy=$(curl -sf "$API/api/projects/$PROJECT/sources" -H "$AUTH" | grep -cE '"status":"(PENDING|SYNCING)"' || true)

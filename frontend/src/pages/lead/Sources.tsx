@@ -81,7 +81,7 @@ export default function Sources() {
           <button type="button" onClick={() => setModal(true)} className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-line-strong bg-card p-7 text-center hover:bg-canvas cursor-pointer">
             <IconTile icon={Upload} size={40} className="bg-brand-50 text-brand-700" />
             <span className="font-medium">Add an export file</span>
-            <span className="max-w-[520px] text-caption text-ink-500">Markdown, text, PDF, Word, task CSV (Jira, Trello, GitHub Projects), Slack JSON, or a GitHub repository</span>
+            <span className="max-w-[520px] text-caption text-ink-500">Markdown, text, PDF, Word, task CSV (Jira, Trello, GitHub Projects), chat exports (Slack, WhatsApp, Discord), or a GitHub repository</span>
           </button>
         </div>
         <div className="flex flex-col gap-4">
@@ -108,7 +108,7 @@ export default function Sources() {
 }
 
 const TYPES: { id: SourceTypeDto; label: string; accept?: string }[] = [
-  { id: 'CHAT_EXPORT', label: 'Chat export (Slack JSON)', accept: '.json,.zip' },
+  { id: 'CHAT_EXPORT', label: 'Chat export (Slack, WhatsApp, Discord)', accept: '.json,.zip,.txt,.csv' },
   { id: 'MEETING_NOTES', label: 'Meeting notes', accept: '.md,.txt,.pdf,.docx' },
   { id: 'DOCUMENT', label: 'Document', accept: '.md,.txt,.pdf,.docx' },
   { id: 'TASK_CSV', label: 'Task board CSV', accept: '.csv' },

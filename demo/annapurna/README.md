@@ -10,6 +10,8 @@ emails (`.example` domains), phone numbers and keys. Priya Sharma, the tech lead
 | `tasks.csv` | TASK_CSV | INTERNAL | – | ANN-12 assigned to Priya (open work), ANN-14 with no assignee (gap), a done task (ignored) |
 | `architecture.md` | DOCUMENT | CONFIDENTIAL | engineering | Postgres-over-Firebase decision with reason |
 | `vendor-contract.md` | DOCUMENT | RESTRICTED | operations | Vendor contact and renewal decision; only Neha may see it |
+| `WhatsApp Chat with Annapurna Core.txt` | CHAT_EXPORT (WhatsApp, Android format) | INTERNAL | – | Cloudinary decision, a domain on a personal card (access), how to deploy, the POS contact, a fake Razorpay key that must be redacted |
+| `discord-design.json` | CHAT_EXPORT (Discord, DiscordChatExporter JSON) | INTERNAL | – | Figma file owner, a blocked logo, emails landing in spam again, an open question about dark mode |
 
 Expected after reconstruction (offline mode):
 
@@ -21,4 +23,6 @@ Expected after reconstruction (offline mode):
 
 Load it into a running backend with `demo/load-demo.sh`.
 
-Extending this toward the 25 planted facts for the evaluation script is the team's Round 2 task.
+All 25 planted facts, and what counts as finding each one, are in `planted-facts.json`. Score a reconstruction with
+`python demo/evaluate.py [api-base-url]` after `demo/load-demo.sh`; the test suite runs the same evaluation offline
+(`PlantedFactsEvaluationTest`). Latest offline result: [`../evaluation-report.md`](../evaluation-report.md).

@@ -70,6 +70,92 @@ class ConnectorTest {
                 .doesNotContain("joined");
     }
 
+    private static List<RawDocument> chat(String filename, byte[] bytes) throws Exception {
+        return new ChatExportConnector(JsonMapper.builder().build())
+                .fetch(new FetchRequest(SourceType.CHAT_EXPORT, "t", Map.of(), new StagedFile(filename, null, bytes)), s -> { });
+    }
+
+    @Test
+    void whatsAppAndroidExportIsReadDayFirstWithContinuationLines() throws Exception {
+        String txt = """
+                08/10/2026, 21:02 - Messages and calls are end-to-end encrypted. No one outside of this chat can read them.
+                08/10/2026, 21:02 - Priya Sharma created group "Annapurna Core"
+                14/10/2026, 21:14 - Priya Sharma: We decided to use Cloudinary for menu photos
+                instead of storing them in Postgres.
+                14/10/2026, 21:15 - Arjun Mehta: <Media omitted>
+                15/10/2026, 09:05 - Arjun Mehta: ok
+                """;
+        List<RawDocument> docs = chat("WhatsApp Chat with Annapurna Core.txt", txt.getBytes(StandardCharsets.UTF_8));
+
+        assertThat(docs).hasSize(2);
+        assertThat(docs.get(0).title()).isEqualTo("Annapurna Core · 2026-10-14");
+        assertThat(docs.get(0).authoredAt()).isEqualTo(Instant.parse("2026-10-14T00:00:00Z"));
+        assertThat(docs.get(0).text())
+                .isEqualTo("[21:14] Priya Sharma: We decided to use Cloudinary for menu photos\n    instead of storing them in Postgres.");
+        assertThat(docs.get(1).text()).isEqualTo("[09:05] Arjun Mehta: ok");
+    }
+
+    @Test
+    void whatsAppIphoneExportWithTwelveHourClockAndInvisibleMarks() throws Exception {
+        String txt = "‎[10/20/26, 9:14:05 PM] Priya Sharma: Payments go live after the vendor sends the key\n"
+                + "[10/20/26, 9:15:00 AM] Rahul Desai: ‎image omitted\n";
+        List<RawDocument> docs = chat("_chat.txt", txt.getBytes(StandardCharsets.UTF_8));
+
+        assertThat(docs).hasSize(1);
+        assertThat(docs.get(0).title()).isEqualTo("WhatsApp chat · 2026-10-20"); // month-first: 20 > 12
+        assertThat(docs.get(0).text()).isEqualTo("[21:14] Priya Sharma: Payments go live after the vendor sends the key");
+    }
+
+    @Test
+    void whatsAppZipWithMediaReadsOnlyTheChat() throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
+            zip.putNextEntry(new ZipEntry("_chat.txt"));
+            zip.write("14/10/2026, 21:14 - Priya Sharma: The domain is on my card\n".getBytes(StandardCharsets.UTF_8));
+            zip.putNextEntry(new ZipEntry("00000012-PHOTO-2026-10-14.jpg"));
+            zip.write(new byte[] {1, 2, 3});
+        }
+        List<RawDocument> docs = chat("WhatsApp Chat - Annapurna Core.zip", bytes.toByteArray());
+        assertThat(docs).singleElement().satisfies(d -> {
+            assertThat(d.title()).isEqualTo("Annapurna Core · 2026-10-14");
+            assertThat(d.text()).isEqualTo("[21:14] Priya Sharma: The domain is on my card");
+        });
+    }
+
+    @Test
+    void discordChatExporterJsonUsesNicknamesAndLocalTime() throws Exception {
+        String json = """
+                {"guild":{"name":"Annapurna Club"},"channel":{"id":"9","name":"design","category":"Text Channels"},
+                 "messages":[
+                  {"id":"1","type":"Default","timestamp":"2026-10-21T18:30:00.123+05:30","content":"<@42> owns the Figma file for the order flow",
+                   "author":{"id":"7","name":"neha","nickname":"Neha Kulkarni"},"mentions":[{"id":"42","name":"rahul","nickname":"Rahul Desai"}]},
+                  {"id":"2","type":"GuildMemberJoin","timestamp":"2026-10-21T18:31:00+05:30","content":"","author":{"id":"8","name":"bot"}},
+                  {"id":"3","type":"Reply","timestamp":"2026-10-21T18:35:00+05:30","content":"on it <:thumbsup:123456>",
+                   "author":{"id":"42","name":"rahul","nickname":""}}]}
+                """;
+        List<RawDocument> docs = chat("Annapurna Club - Text Channels - design [9].json", json.getBytes(StandardCharsets.UTF_8));
+
+        assertThat(docs).singleElement().satisfies(d -> {
+            assertThat(d.title()).isEqualTo("#design · 2026-10-21");
+            assertThat(d.text()).isEqualTo("[18:30] Neha Kulkarni: @Rahul Desai owns the Figma file for the order flow\n"
+                    + "[18:35] rahul: on it :thumbsup:");
+        });
+    }
+
+    @Test
+    void discordCsvExportAndUnknownFilesAreTold() throws Exception {
+        String csv = "AuthorID,Author,Date,Content,Attachments,Reactions\n"
+                + "7,neha,2026-10-22T10:00:00.0000000+05:30,\"Waiting for the committee to approve the new logo\",,\n";
+        List<RawDocument> docs = chat("Annapurna Club - Text Channels - design [9].csv", csv.getBytes(StandardCharsets.UTF_8));
+        assertThat(docs).singleElement().satisfies(d ->
+                assertThat(d.text()).isEqualTo("[10:00] neha: Waiting for the committee to approve the new logo"));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> chat("notes.txt", "just some notes".getBytes(StandardCharsets.UTF_8)))
+                .hasMessageContaining("not a WhatsApp chat export");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> chat("tasks.csv", "Issue key,Summary\n".getBytes(StandardCharsets.UTF_8)))
+                .hasMessageContaining("not a Discord export");
+    }
+
     @Test
     void meetingNotesDateAndTitleFromContent() throws Exception {
         String md = "# Weekly sync\n\nDate: 2026-10-08\n\nDecision: launch on 15 November.";
