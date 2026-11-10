@@ -1,127 +1,129 @@
 # Baton
 
-**Every handover sentence carries its receipt.** Baton turns a project's authorised records into a verified,
-permission-aware handover, and turns whatever has no receipt into a question for the person leaving.
+**Every handover sentence carries its receipt.**
+
+When someone leaves a project, their knowledge usually leaves with them. Baton reads the project's authorised
+records (chats, documents, task boards, repositories), reconstructs what the next person needs to know, and links
+every statement to the exact quote it came from. Anything without a source becomes a question for the person
+leaving. A lead reviews and approves it, and each successor gets a frozen, signed version filtered to what they are
+allowed to see.
+
+Each company's data stays in **its own database**. Baton keeps only the workspace name and an encrypted way in.
 
 Team Bramhastra: Deven Rikame (lead, backend) · Bhushan Shinde (database, AI prompts) · Shawn Dmello (frontend, deployment)
 
-Live: frontend on Vercel (https://baton-umber.vercel.app), API on Render. Every push to `main` deploys both.
+**Live:** https://baton-umber.vercel.app (pick a demo person on the sign-in page; workspace `demo`)
+
+**Full documentation:** [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)
+
+---
+
+## What it does
+
+| For | Features |
+|---|---|
+| **Companies** | Self-service sign-up with your own PostgreSQL · people, groups, clearances · projects and teams · audit log · connect GitHub, Slack and Google Drive with your own credentials · bring your own AI key · Free and Team plans · disconnect any time and keep everything |
+| **Project leads** | Add sources · reconstruct a handover with live progress · review claims with full history · resolve conflicts · timeline · view as a recipient · approval gate · versions and diff · share with expiry and revoke · successor progress · knowledge-risk radar · living handovers (drift, new version, move recipients) · signed export and verify |
+| **The person leaving** | Exit interview: answers become evidence |
+| **Successors** | Start here · Day 1 / Week 1 / Month 1 checklist · ownership map · timeline · **Ask the handover** with cited answers · send unanswered questions to the person leaving · what changed since their last version · acknowledge |
+
+How a handover flows: **sources → redact → reconstruct → review → approve (SHA-256 version) → share → successors read, ask and acknowledge.**
+
+Trust rules the code enforces, not the AI:
+- A claim is shown as fact only if its quote is found word for word in a source the reader may see.
+- Secrets and personal data are redacted before anything is stored or sent to a model.
+- Permissions filter every search, claim and handover; hidden things return 404.
+- Approval is blocked while conflicts, unreviewed critical claims or undecided inferred claims remain.
+
+## Tech stack
+
+**Backend:** Java 21, Spring Boot 4.1, PostgreSQL 16 + pgvector, Flyway, Testcontainers ·
+**Frontend:** React 18, TypeScript, Vite 5, Tailwind CSS 4.1, TanStack Query ·
+**AI:** any OpenAI-compatible API (Groq, OpenAI, OpenRouter) or a fully offline extractor ·
+**Hosting:** Render (API), Vercel (web app), Neon (Baton's home database), GitHub Actions
 
 ## Run locally
 
-Requirements: JDK 21, Docker.
+Requirements: JDK 21, Docker, Node.js 20+.
 
 ```bash
 docker compose up -d          # Postgres 16 + pgvector on localhost:5433
 ./mvnw spring-boot:run        # API on http://localhost:8080
 ```
 
-On first start, Flyway creates the schema and the synthetic **Project Annapurna** team is seeded.
-The demo password for every persona is `baton.demo.password` in `application.properties`.
-
-| Persona | Email | Clearance | Groups | Project role |
-|---|---|---|---|---|
-| Neha Kulkarni (lead) | neha@annapurna.test | RESTRICTED | engineering, operations | PROJECT_LEAD |
-| Priya Sharma (departing) | priya@annapurna.test | CONFIDENTIAL | engineering | MEMBER |
-| Arjun Mehta (incoming engineer) | arjun@annapurna.test | CONFIDENTIAL | engineering | MEMBER |
-| Rahul Desai (incoming design) | rahul@annapurna.test | INTERNAL | design | MEMBER |
-| Org Admin | admin@annapurna.test | INTERNAL | — | not a member |
-
-## Tests
-
 ```bash
-./mvnw test                   # needs Docker: tests run against a real pgvector container
+cd frontend
+npm install
+npm run dev                   # http://localhost:5173
 ```
 
-## Try it with the demo data
+Sign in with workspace `demo`. The synthetic **Project Annapurna** team is seeded on first start; every demo person's
+password is `annapurna-demo`.
 
-With the backend running, load the synthetic Project Annapurna sources, create Priya's handover and reconstruct it:
+| Person | Email | Role |
+|---|---|---|
+| Neha Kulkarni | neha@annapurna.test | Project lead |
+| Priya Sharma | priya@annapurna.test | Leaving |
+| Arjun Mehta | arjun@annapurna.test | Incoming engineer |
+| Rahul Desai | rahul@annapurna.test | Incoming designer |
+| Org Admin | admin@annapurna.test | Organisation admin |
+
+Load the demo sources and reconstruct Priya's handover:
 
 ```bash
 bash demo/load-demo.sh
 ```
 
-See [demo/annapurna/README.md](demo/annapurna/README.md) for what is planted and what to expect.
+To sign up a test company against a local database, start the API with `ALLOW_PRIVATE_DB_HOSTS=true`.
 
-## AI modes
+## Tests
 
-| `AI_MOCK` | `GROQ_API_KEY` | Behaviour |
-|---|---|---|
-| `true` (default) | any | **Offline**: replays recorded Groq answers for identical prompts, else a rule-based extractor. No network. |
-| `false` | set | **Groq** (`llama-3.3-70b-versatile`): cache → circuit breaker → rate limit → retry with back-off. Answers are cached, so a later offline demo replays them. |
-
-Either way the model only proposes. Code verifies every quote, computes status and confidence, finds
-conflicts and writes the exit questions.
-
-## API so far (M1 + M2 + M3)
-
-| Method | Path | Notes |
-|---|---|---|
-| POST | `/api/auth/login` | `{email, password}` → `{token, expiresAt, user}` |
-| GET | `/api/me` | Current user, clearance and groups |
-| GET | `/api/projects` | Only projects you are a member of |
-| GET | `/api/projects/{id}` | 404 (never 403) if you are not a member |
-| POST | `/api/projects/{id}/sources` | Multipart: `type`, `title`, `sensitivity`, `aclGroups`, `authorisationAttested=true`, and `file` or `repo` (+`branch`) for GitHub → 202 `{source, jobId}` |
-| GET | `/api/projects/{id}/sources` | Sources you may see |
-| GET | `/api/sources/{id}` · `/api/sources/{id}/documents` | 404 if not visible |
-| POST | `/api/sources/{id}/sync` | Re-sync a GitHub source (lead only) |
-| GET | `/api/jobs/{id}` | Job status and progress |
-| GET | `/api/jobs/{id}/events` | Server-sent events: `progress` `{stage, percent, message, counts}`, then `done` |
-| GET | `/api/chunks/{id}` | Evidence drawer; 404 if restricted (IDOR-safe) |
-| GET | `/api/projects/{id}/search?q=` | Hybrid keyword + vector search, permission-filtered before ranking |
-| POST | `/api/projects/{id}/handovers` | Lead only: `{departingUserId, title, scenario, aliases?}` |
-| GET | `/api/projects/{id}/handovers` · `/api/handovers/{id}` | Lead and departing member |
-| POST | `/api/handovers/{id}/reconstruct` | Lead only → 202 `{jobId}`; 409 if already running |
-| GET | `/api/handovers/{id}/runs/latest` | Run status, counts, warnings |
-| GET | `/api/handovers/{id}/claims?type=&status=&reviewState=&critical=&page=&size=` | Claims with verified evidence and links |
-| GET | `/api/claims/{id}` | 404 if any cited chunk is hidden from you |
-| GET | `/api/handovers/{id}/gaps` | Exit-interview questions |
-| GET | `/api/handovers/{id}/timeline` · `/api/handovers/{id}/summary` | Decisions over time; counts |
-| PATCH | `/api/claims/{id}` | Lead: `{version, reviewState?, title?, body?, attributes?, critical?, reason?}`; 409 `CLAIM_STALE` / `INVALID_TRANSITION` |
-| GET | `/api/claims/{id}/revisions` | Before/after history with actor and reason |
-| POST | `/api/claims/{id}/resolve-conflict` | Lead: `{otherClaimId, reason}`; this claim wins, the other is superseded |
-| POST | `/api/handovers/{id}/claims` | Lead adds a claim; every quote is verified against the chunk |
-| POST | `/api/gaps/{id}/answer` | Departing member: `{answer, sensitivity?, owner?}` → testimony evidence, re-score |
-| POST | `/api/gaps/{id}/skip` | `{reason?}` |
-| GET | `/api/handovers/{id}/preview?as={userId}` | Lead: "view as" a recipient |
-| GET | `/actuator/health` | Public |
-
-### Review (M4)
-Claim review states follow LLD L3: `PENDING → ACCEPTED | REJECTED | NEEDS_INFO | EDITED`, `REJECTED → PENDING`,
-`NEEDS_INFO → PENDING` (when the leaver answers), `ACCEPTED → EDITED`, `EDITED → ACCEPTED`. Any content edit makes a
-claim `EDITED`. Needs-info sends the lead's question to the leaver's exit interview. Answers are redacted, refused if they
-contain keys or passwords, stored as `TESTIMONY` at least as sensitive as the claims they discuss, cited exactly, and
-the handover is re-scored in the same transaction. Editing an approved handover reopens it for review.
-
-### Reconstruction pipeline (Flow B)
-`SIGNAL` (task board and GitHub, no AI) → `EXTRACT` (redacted chunks in `<chunk>` tags, batched per access class) →
-`VERIFY` (quote located in the chunk by code; verified quotes are cut from the source) → `CONSOLIDATE` →
-`CONFLICT` → `SCORE` (status and confidence per LLD) → `GAP` (6–12 exit questions) → `TIMELINE`.
-Stages are idempotent and resume after a crash. A claim is visible only if you may see **every** chunk it cites.
-
-Source types: `DOCUMENT` and `MEETING_NOTES` (.md, .txt, .pdf, .docx…), `TASK_CSV` (Jira/Trello/GitHub Projects
-export), `CHAT_EXPORT` (Slack export .zip or channel .json), `GITHUB` (read-only REST).
-
-### What happens on ingest
-Fetch → **redact** (emails, phones, API keys, passwords, private keys become tokens like `[API_KEY_1]`; originals
-stored AES-GCM encrypted) → chunk → embed locally with MiniLM → store. Uploaded files are held encrypted only until
-the job finishes, then deleted. Raw text is never stored in the clear.
-
-Errors always look like `{"error": "CODE", "message": "...", "details": ...}` using the codes in LLD L9.
+```bash
+./mvnw test                   # 84 tests against a real pgvector container (needs Docker)
+```
 
 ## Configuration
 
-Secrets come from environment variables: `DB_URL`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET` (≥ 32 bytes),
-`CRYPTO_KEY` (base64, 32 bytes: `openssl rand -base64 32`), `GITHUB_TOKEN` (optional, read-only),
-`EMBEDDINGS_ENABLED`,
-`GROQ_API_KEY`, `AI_MOCK` (default `true`: replays recorded AI responses so the demo works offline),
-`CORS_ORIGINS`, `DEMO_SEED`.
+Everything is set with environment variables. The important ones for production:
+
+| Variable | Purpose |
+|---|---|
+| `DB_URL`, `DB_USER`, `DB_PASSWORD` | Baton's home database |
+| `JWT_SECRET` | Token signing (≥ 32 bytes) |
+| `CRYPTO_KEY` | Master key, `openssl rand -base64 32` — back it up, never change it |
+| `CORS_ORIGINS`, `APP_URL` | The web app's address |
+| `RESEND_API_KEY`, `MAIL_FROM` | Turns email on (password reset, invitations, share notices) |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | Turns online payment on |
+| `FREE_PEOPLE`, `FREE_PROJECTS`, `FREE_SOURCES`, `TEAM_PRICE_MINOR` | Plan limits and price |
+| `AI_MOCK`, `GROQ_API_KEY`, `EMBEDDINGS_ENABLED` | Server-wide AI and embeddings |
+
+Frontend build: `VITE_API_BASE` (API address), `VITE_DEMO_PASSWORD` (shows the demo people).
+The full list with defaults is in [the documentation](docs/DOCUMENTATION.md#14-configuration-reference).
+
+## Deployment
+
+Every push to `main` deploys both parts: Vercel builds the web app from GitHub, and
+[`.github/workflows/deploy-api.yml`](.github/workflows/deploy-api.yml) triggers the Render deploy of the API
+(Docker image from [`Dockerfile`](Dockerfile)). Details in [the documentation](docs/DOCUMENTATION.md#15-deployment).
+
+## Repository layout
+
+```
+src/main/java/…/baton/   API (admin, ai, billing, handover, identity, insight, integration, reconstruct, review, source, tenant, …)
+src/main/resources/      Settings, database migrations, AI prompts
+src/test/                Tests
+frontend/                Web app
+demo/                    Synthetic demo sources
+design/figma-plugin/     Figma plugin that draws the product design
+docs/                    Documentation
+```
 
 ## Data
 
-Demonstrations use synthetic data only. No real club or company messages are uploaded.
+Demonstrations use synthetic data only (Project Annapurna is made up). No real club or company messages are used.
 
 ## AI disclosure
 
-AI coding assistants were used to generate parts of the code from our own specification; the team designed,
-reviewed and tested it. Groq-hosted models run inside the product at runtime on redacted text only.
+AI coding assistants were used to generate parts of the code from the team's own specification; the team designed,
+reviewed and tested it. Inside the product, AI models run only when a workspace connects its own provider (or the
+server is configured with one), and only on redacted text.
