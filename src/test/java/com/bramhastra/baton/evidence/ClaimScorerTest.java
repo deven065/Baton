@@ -25,6 +25,14 @@ class ClaimScorerTest {
         return new ClaimScorer.Ev(source, type, Instant.parse(date + "T00:00:00Z"), valid ? 1.0 : 0.4, valid, s, List.of(acl));
     }
 
+    @Test
+    void aClaimTheLeadReplacedIsStaleAtOnceHoweverRecent() {
+        var fresh = ev(UUID.randomUUID(), SourceType.MEETING_NOTES, "2026-10-08", true, Sensitivity.INTERNAL);
+        var superseded = scorer.score(new ClaimScorer.Input(false, false, true, Sensitivity.INTERNAL, List.of(),
+                List.of(fresh), 0, List.of()));
+        assertThat(superseded.status()).isEqualTo(ClaimScorer.ClaimStatus.STALE);
+    }
+
     private ClaimScorer.ScoreResult score(boolean reasoning, boolean conflict, ClaimScorer.Ev... evidence) {
         int invalid = (int) List.of(evidence).stream().filter(e -> !e.valid()).count();
         return scorer.score(new ClaimScorer.Input(reasoning, conflict, false, Sensitivity.INTERNAL, List.of(),

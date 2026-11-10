@@ -190,11 +190,23 @@ public class ClaimReviewService {
         if (n == 0) {
             throw new ApiException(ErrorCode.INVALID_TRANSITION, "These claims have no open conflict");
         }
+        // A lead who changes their mind replaces the earlier decision; the two never supersede each other.
+        jdbc.sql("DELETE FROM claim_link WHERE kind = 'SUPERSEDES' AND from_claim_id = :l AND to_claim_id = :w")
+                .param("w", winnerId).param("l", loserId).update();
         jdbc.sql("""
                 INSERT INTO claim_link (from_claim_id, to_claim_id, kind, resolved) VALUES (:w, :l, 'SUPERSEDES', TRUE)
                 ON CONFLICT DO NOTHING
                 """).param("w", winnerId).param("l", loserId).update();
         String why = "Superseded by \"" + winner.title() + "\"" + (reason == null || reason.isBlank() ? "" : ": " + reason.strip());
+        // Choosing the current claim is a review decision too, so a re-run keeps it (and this decision).
+        if (winner.reviewState() == ReviewState.PENDING || winner.reviewState() == ReviewState.NEEDS_INFO) {
+            Locked chosen = new Locked(winner.id(), winner.handoverId(), winner.version() + 1, ReviewState.ACCEPTED,
+                    winner.title(), winner.body(), winner.attributes(), winner.critical());
+            jdbc.sql("UPDATE claim SET review_state = 'ACCEPTED', version = version + 1, updated_at = now() WHERE id = :id")
+                    .param("id", winnerId).update();
+            revision(winnerId, chosen.version(), me.id(), winner.snapshot(), chosen.snapshot(),
+                    "Chosen as current over \"" + loser.title() + "\"" + (reason == null || reason.isBlank() ? "" : ": " + reason.strip()));
+        }
         if (loser.reviewState() != ReviewState.REJECTED) {
             Locked after = new Locked(loser.id(), loser.handoverId(), loser.version() + 1, ReviewState.REJECTED,
                     loser.title(), loser.body(), loser.attributes(), loser.critical());

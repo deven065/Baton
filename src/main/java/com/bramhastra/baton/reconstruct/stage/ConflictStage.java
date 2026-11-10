@@ -52,6 +52,14 @@ public class ConflictStage implements PipelineStage {
                 bySubject.computeIfAbsent(c.type() + "|" + c.subject(), k -> new ArrayList<>()).add(c);
             }
         }
+        // Pairs the lead already decided (a resolved conflict or a supersedes link, either way round) stay decided.
+        java.util.Set<String> decided = new java.util.HashSet<>();
+        for (ClaimRepository.LinkRow l : claims.links(ctx.handover().id())) {
+            if (l.kind().equals("SUPERSEDES") || (l.kind().equals("CONFLICTS_WITH") && l.resolved())) {
+                decided.add(l.from() + "|" + l.to());
+                decided.add(l.to() + "|" + l.from());
+            }
+        }
         int conflicts = 0;
         for (List<ClaimRepository.ClaimRow> group : bySubject.values()) {
             group.sort(Comparator.comparing(ConflictStage::when));
@@ -59,7 +67,8 @@ public class ConflictStage implements PipelineStage {
                 for (int j = i + 1; j < group.size(); j++) {
                     ClaimRepository.ClaimRow older = group.get(i);
                     ClaimRepository.ClaimRow newer = group.get(j);
-                    if (!normaliseValue(valueOf(older)).equals(normaliseValue(valueOf(newer)))) {
+                    if (!normaliseValue(valueOf(older)).equals(normaliseValue(valueOf(newer)))
+                            && !decided.contains(newer.id() + "|" + older.id())) {
                         claims.link(newer.id(), older.id(), "CONFLICTS_WITH");
                         conflicts++;
                     }

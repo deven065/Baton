@@ -72,7 +72,8 @@ public class ClaimScorer {
             status = ClaimStatus.INFERRED;
         } else if (valid.isEmpty()) {
             status = ClaimStatus.MISSING_EVIDENCE;
-        } else if (in.superseded() && ageDays > 60) {
+        } else if (in.superseded()) {
+            // Superseded means the lead chose another claim as current; that decision applies at once.
             status = ClaimStatus.STALE;
         } else if (sources >= 2 || maxTrust == 3) {
             status = ClaimStatus.VERIFIED;

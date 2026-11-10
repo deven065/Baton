@@ -49,10 +49,20 @@ public class ConsolidateStage implements PipelineStage {
         List<ClaimRepository.ClaimRow> rows = claims.claims(ctx.handover().id()).stream()
                 .filter(c -> ctx.run().id().equals(c.runId()) && c.reviewState().equals("PENDING"))
                 .toList();
+        // Claims the lead already reviewed (accepted, edited or rejected) survive a re-run; a fresh copy of one of
+        // them would resurrect a rejected claim or undo a decision, so it is dropped.
+        List<ClaimRepository.ClaimRow> reviewed = claims.claims(ctx.handover().id()).stream()
+                .filter(c -> !c.reviewState().equals("PENDING")).toList();
         List<ClaimRepository.ClaimRow> kept = new ArrayList<>();
         Set<UUID> removed = new HashSet<>();
         int merged = 0;
         for (ClaimRepository.ClaimRow c : rows) {
+            if (reviewed.stream().anyMatch(r -> same(r, c))) {
+                claims.delete(c.id());
+                removed.add(c.id());
+                merged++;
+                continue;
+            }
             ClaimRepository.ClaimRow into = kept.stream().filter(k -> same(k, c)).findFirst().orElse(null);
             if (into == null) {
                 kept.add(c);

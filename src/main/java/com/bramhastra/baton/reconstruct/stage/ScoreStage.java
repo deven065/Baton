@@ -47,11 +47,16 @@ public class ScoreStage implements PipelineStage {
         Map<UUID, List<ClaimRepository.EvidenceRow>> evidence = claims.evidence(handoverId).stream()
                 .collect(Collectors.groupingBy(ClaimRepository.EvidenceRow::claimId));
         List<ClaimRepository.LinkRow> links = claims.links(handoverId);
-        for (ClaimRepository.ClaimRow c : claims.claims(handoverId)) {
+        List<ClaimRepository.ClaimRow> all = claims.claims(handoverId);
+        java.util.Set<UUID> rejected = all.stream().filter(x -> x.reviewState().equals("REJECTED"))
+                .map(ClaimRepository.ClaimRow::id).collect(Collectors.toSet());
+        for (ClaimRepository.ClaimRow c : all) {
             List<ClaimRepository.EvidenceRow> ev = evidence.getOrDefault(c.id(), List.of());
             boolean conflict = links.stream().anyMatch(l -> l.kind().equals("CONFLICTS_WITH") && !l.resolved()
                     && (l.from().equals(c.id()) || l.to().equals(c.id())));
-            boolean superseded = links.stream().anyMatch(l -> l.kind().equals("SUPERSEDES") && l.to().equals(c.id()));
+            // Superseded only by a claim that is itself still in play (a rejected claim supersedes nothing).
+            boolean superseded = links.stream().anyMatch(l -> l.kind().equals("SUPERSEDES") && l.to().equals(c.id())
+                    && !rejected.contains(l.from()));
             String reasoning = c.attr("reasoning");
             List<String> extra = new ArrayList<>();
             if (c.flags().contains("PROMPT_INJECTION_SUSPECTED")) {
