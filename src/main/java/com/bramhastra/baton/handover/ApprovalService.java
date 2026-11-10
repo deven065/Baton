@@ -42,9 +42,11 @@ public class ApprovalService {
     private final HandoverRepository handovers;
     private final AuditService audit;
     private final ObjectMapper json;
+    private final com.bramhastra.baton.reconstruct.stage.ScoreStage scorer;
 
     public ApprovalService(JdbcClient jdbc, HandoverAccess access, HandoverRepository handovers, AuditService audit,
-                           ObjectMapper json) {
+                           ObjectMapper json, com.bramhastra.baton.reconstruct.stage.ScoreStage scorer) {
+        this.scorer = scorer;
         this.jdbc = jdbc;
         this.access = access;
         this.handovers = handovers;
@@ -120,6 +122,7 @@ public class ApprovalService {
     public VersionView approve(CurrentUser me, UUID handoverId) {
         Handover h = access.requireLead(me, handoverId);
         HandoverStatus next = HandoverStateMachine.next(h.status(), HandoverStateMachine.Event.APPROVE);
+        scorer.rescore(h.id()); // freeze statuses computed with the current rules and links
         List<Check> failed = checks(h).stream().filter(c -> c.blocking() && !c.ok()).toList();
         if (!failed.isEmpty()) {
             throw new ApiException(ErrorCode.APPROVAL_BLOCKED, "Resolve the blockers before approving",
@@ -270,6 +273,7 @@ public class ApprovalService {
         }
         HandoverStatus next = HandoverStateMachine.next(h.status(), HandoverStateMachine.Event.EDIT_AFTER_APPROVAL);
         handovers.transition(h.id(), h.status(), next);
+        scorer.rescore(h.id());
         audit.record(me.id(), "HANDOVER_REOPENED", "handover", h.id(), h.projectId(),
                 Map.of("fromVersion", h.currentVersionNo() == null ? 0 : h.currentVersionNo()));
     }

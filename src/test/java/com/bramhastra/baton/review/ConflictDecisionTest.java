@@ -79,6 +79,30 @@ class ConflictDecisionTest {
         assertThat(mutual).isZero();
     }
 
+    @Test
+    void theRepairMigrationKeepsTheLatestOfTwoContradictingDecisions() throws Exception {
+        DemoFixture demo = new DemoFixture(mvc, jdbc, password).createProject("Annapurna (repair)").loadSourcesAndReconstruct();
+        String neha = demo.login("neha@annapurna.test");
+        Map<String, Object> nov29 = launch(demo, neha, "2026-11-29");
+        Map<String, Object> nov15 = launch(demo, neha, "2026-11-15");
+        // The state the old bug left behind: each claim supersedes the other; the 29 November decision came last.
+        jdbc.sql("""
+                INSERT INTO claim_link (from_claim_id, to_claim_id, kind, resolved, created_at) VALUES
+                  (CAST(:a AS uuid), CAST(:b AS uuid), 'SUPERSEDES', TRUE, now() - interval '1 hour'),
+                  (CAST(:b AS uuid), CAST(:a AS uuid), 'SUPERSEDES', TRUE, now())
+                """).param("a", nov15.get("id")).param("b", nov29.get("id")).update();
+
+        String repair = java.nio.file.Files.readString(java.nio.file.Path.of(
+                "src/main/resources/db/migration/V9__repair_mutual_supersedes.sql"));
+        jdbc.sql(repair).update();
+
+        List<String> left = jdbc.sql("""
+                SELECT CAST(from_claim_id AS text) FROM claim_link
+                WHERE kind = 'SUPERSEDES' AND from_claim_id IN (CAST(:a AS uuid), CAST(:b AS uuid))
+                """).param("a", nov15.get("id")).param("b", nov29.get("id")).query(String.class).list();
+        assertThat(left).containsExactly((String) nov29.get("id"));
+    }
+
     private static Map<String, Object> launch(DemoFixture demo, String token, String value) throws Exception {
         String body = demo.getJson(token, "/api/handovers/" + demo.handoverId + "/claims?size=200");
         List<Map<String, Object>> found = JsonPath.read(body,
