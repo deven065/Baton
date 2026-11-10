@@ -326,6 +326,12 @@ its database. All data stays in the company's database.
 - **Signed exports**: manifest signed with a key derived from the workspace key; any changed file is detected.
 - **Read-only connectors**: Baton never writes to GitHub, Slack or Drive.
 - **Authorisation attestation**: adding a source requires confirming you are allowed to share it.
+- **Shared demo is locked against vandalism**: the demo workspace's passwords are public, so there the API refuses
+  password changes, deactivating, demoting or resetting people, removing team members or changing their roles, revoking shares,
+  deleting groups, and any change to AI, connections, billing or the workspace (`DEMO_LOCKED`, 403). The handover
+  workflow and adding people, groups and projects still work. Other workspaces are unaffected.
+- **No development secrets in deployment**: against a database that is not on the same machine, the server refuses
+  to start with the development `JWT_SECRET` and logs a security error for the development `CRYPTO_KEY`.
 
 ---
 
@@ -471,6 +477,7 @@ All settings are environment variables (defaults in `src/main/resources/applicat
 | `ALLOW_PRIVATE_DB_HOSTS` | `false` | Allow local/private company databases (local development only) |
 | `DEMO_SEED` | `true` | Create the demo workspace data |
 | `DEMO_PASSWORD` | `annapurna-demo` | Password for every demo person |
+| `DEMO_LOCKED` | `true` | Refuse changes in the demo workspace that would break it for the next visitor |
 | `EMBEDDINGS_ENABLED` | `true` | Local MiniLM embeddings (needs memory; `false` on the free Render plan → keyword search) |
 
 **AI**
@@ -693,7 +700,7 @@ decides each person's role. The Figma plugin that draws the product design (file
 ## 19. Testing
 
 ```bash
-./mvnw test          # 99 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
+./mvnw test          # 104 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
 cd frontend && npx tsc -b --noEmit && npm run build
 ```
 
@@ -729,6 +736,7 @@ dashboard", "renewal is due on 2026-12-01"); a model is expected to find them.
 | Handover lifecycle | `HandoverStateMachineTest`, `LifecycleApiTest`, `HandoverFeaturesApiTest` |
 | AI, connectors, billing | `AiSettingsApiTest`, `ConnectorsAndBillingApiTest` (fake AI, Slack, Google and Razorpay servers) |
 | Evaluation | `PlantedFactsEvaluationTest` (25 planted facts, secrets, injection, restricted facts) |
+| Deployment safety | `DemoGuardTest` (shared demo cannot be vandalised), `SecretsCheckTest` |
 
 Tests cover, among others: workspace isolation, redaction before AI, quote verification, permission filtering,
 approval blocking, signed-export tampering, rate limits, disconnect, password links, plan limits and payment
