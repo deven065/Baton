@@ -1,11 +1,11 @@
 import { AlertTriangle, Check, Database, KeyRound, Lock, ShieldCheck } from 'lucide-react';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/form';
 import { Banner, Card, Logo } from '@/components/ui/misc';
 import { HOME, useAuth } from '@/lib/auth';
-import { ApiError, api } from '@/lib/http';
+import { ApiError, wakeApi, api } from '@/lib/http';
 import { cn } from '@/lib/utils';
 
 const slugify = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
@@ -56,17 +56,23 @@ export function SignupWizard() {
 
   const effectiveSlug = slugTouched ? slug : slugify(company);
 
-  const checkSlug = async () => {
-    if (!SLUG.test(effectiveSlug)) return false;
+  // The first request after a quiet period can take up to a minute while the free host wakes up.
+  useEffect(() => { wakeApi(); }, []);
+
+  /** 'free', 'taken', or 'error' (could not tell: the server is waking up, busy, or unreachable). */
+  const checkSlug = async (): Promise<'free' | 'taken' | 'error'> => {
     setSlugState('checking');
     try {
-      await api(`/api/workspaces/${effectiveSlug}`);
+      await api(`/api/workspaces/${effectiveSlug}`, { signal: AbortSignal.timeout(60_000) });
       setSlugState('taken');
-      return false;
+      return 'taken';
     } catch (e) {
-      const free = e instanceof ApiError && e.status === 404;
-      setSlugState(free ? 'free' : 'idle');
-      return free;
+      if (e instanceof ApiError && e.status === 404) {
+        setSlugState('free');
+        return 'free';
+      }
+      setSlugState('idle');
+      return 'error';
     }
   };
 
@@ -76,7 +82,9 @@ export function SignupWizard() {
     if (step === 0) {
       if (!company.trim()) return setError({ message: 'Enter your company or team name.', field: 'company' });
       if (!SLUG.test(effectiveSlug)) return setError({ message: 'Use 3–40 lowercase letters, digits or hyphens.', field: 'slug' });
-      if (!(await checkSlug())) return setError({ message: 'That workspace name is taken. Choose another.', field: 'slug' });
+      const state = await checkSlug();
+      if (state === 'taken') return setError({ message: 'That workspace name is taken. Choose another.', field: 'slug' });
+      if (state === 'error') return setError({ message: 'Couldn’t check the name just now. The server may still be waking up: wait a few seconds and press Continue again.' });
       setSlug(effectiveSlug);
       setSlugTouched(true);
       return setStep(1);
@@ -175,9 +183,10 @@ export function SignupWizard() {
         <div className="flex gap-2">
           {step > 0 && <Button type="button" onClick={() => { setError(null); setStep(step - 1); }} disabled={busy}>Back</Button>}
           <Button kind="primary" size="lg" type="submit" className="flex-1" disabled={busy || slugState === 'checking'}>
-            {step < 2 ? 'Continue' : busy ? 'Setting up your database…' : 'Create workspace'}
+            {slugState === 'checking' ? 'Checking the name…' : step < 2 ? 'Continue' : busy ? 'Setting up your database…' : 'Create workspace'}
           </Button>
         </div>
+        {slugState === 'checking' && <p className="text-caption text-ink-500" role="status">Waking up the server, this can take up to a minute the first time.</p>}
         {busy && <p className="text-caption text-ink-500" role="status">Checking the connection, creating tables and your account. This takes a few seconds.</p>}
         <p className="text-center text-small text-ink-500">Already have a workspace? <Link to="/login" className="font-medium text-brand-600 hover:underline">Sign in</Link></p>
       </form>

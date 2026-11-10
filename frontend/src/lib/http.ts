@@ -94,3 +94,8 @@ export async function download(path: string, fallbackName: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/** Wakes the API (the free host sleeps when idle) while the person is still filling in a form. Never throws. */
+export function wakeApi() {
+  try { fetch(BASE + '/actuator/health', { mode: 'no-cors' }).catch(() => undefined); } catch { /* ignore */ }
+}

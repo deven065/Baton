@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox, Field, Input } from '@/components/ui/form';
 import { Avatar, Banner, Card, EvidenceQuote, Logo } from '@/components/ui/misc';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD, DEMO_WORKSPACE, HOME, lastWorkspace, useAuth } from '@/lib/auth';
-import { ApiError, api } from '@/lib/http';
+import { ApiError, api, wakeApi } from '@/lib/http';
 
 function BrandPanel({ over, title, sub, children }: { over: string; title: string; sub: string; children?: ReactNode }) {
   return (
@@ -36,6 +36,7 @@ export function LoginPage() {
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  useEffect(() => { wakeApi(); }, []);
 
   const go = async (ws: string, e: string, p: string) => {
     setError('');
