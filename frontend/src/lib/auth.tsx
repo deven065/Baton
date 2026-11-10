@@ -49,7 +49,9 @@ function tone(id: string) {
 
 /** Works out what this user does in Baton from what the API lets them see. */
 async function resolveSession(me: UserDto): Promise<Session> {
-  const projects = await api<ProjectDto[]>('/api/projects');
+  // With a temporary password the API allows nothing but /api/me and the password change, so stop here;
+  // the session is re-read once the new password is set.
+  const projects = me.mustChangePassword ? [] : await api<ProjectDto[]>('/api/projects');
   const project = projects.find(p => p.myRole === 'PROJECT_LEAD') ?? projects[0] ?? null;
   let role: Role = me.orgRole === 'ADMIN' && !project ? 'admin' : 'recipient';
   let handover: HandoverDto | null = null;
