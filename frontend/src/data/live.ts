@@ -8,7 +8,7 @@ export type SensitivityDto = 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'RESTRICTE
 export type ClaimStatusDto = 'VERIFIED' | 'SINGLE_SOURCE' | 'INFERRED' | 'CONFLICTING' | 'MISSING_EVIDENCE' | 'STALE';
 export type ReviewStateDto = 'PENDING' | 'ACCEPTED' | 'EDITED' | 'REJECTED' | 'NEEDS_INFO';
 export type HandoverStatusDto = 'DRAFT' | 'RECONSTRUCTING' | 'IN_REVIEW' | 'APPROVED' | 'SHARED' | 'ARCHIVED';
-export type SourceTypeDto = 'GITHUB' | 'TASK_CSV' | 'DOCUMENT' | 'MEETING_NOTES' | 'CHAT_EXPORT' | 'TESTIMONY';
+export type SourceTypeDto = 'GITHUB' | 'SLACK' | 'GOOGLE_DRIVE' | 'TASK_CSV' | 'DOCUMENT' | 'MEETING_NOTES' | 'CHAT_EXPORT' | 'TESTIMONY';
 
 export interface UserDto {
   id: string; email: string; displayName: string; orgRole: 'ADMIN' | 'MEMBER'; clearance: SensitivityDto; groups: string[];
@@ -69,7 +69,7 @@ export const CLAIM_TYPE_LABEL: Record<string, string> = {
 };
 export const typeLabel = (t: string) => CLAIM_TYPE_LABEL[t] ?? t;
 export const SOURCE_TYPE_LABEL: Record<SourceTypeDto, string> = {
-  GITHUB: 'GitHub', TASK_CSV: 'Task board', DOCUMENT: 'Document', MEETING_NOTES: 'Meeting notes', CHAT_EXPORT: 'Chat export', TESTIMONY: 'Testimony',
+  GITHUB: 'GitHub', SLACK: 'Slack', GOOGLE_DRIVE: 'Google Drive', TASK_CSV: 'Task board', DOCUMENT: 'Document', MEETING_NOTES: 'Meeting notes', CHAT_EXPORT: 'Chat export', TESTIMONY: 'Testimony',
 };
 /** Recipient-facing wording for an evidence status. */
 export const STATUS_LABEL: Record<ClaimStatusDto, string> = {
@@ -180,7 +180,7 @@ export function useStartReconstruct(handoverId?: string | null) {
 export function useCreateSource(projectId?: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: { type: SourceTypeDto; title: string; sensitivity: SensitivityDto; aclGroups: string[]; file?: File; repo?: string; branch?: string }) => {
+    mutationFn: (p: { type: SourceTypeDto; title: string; sensitivity: SensitivityDto; aclGroups: string[]; file?: File; repo?: string; branch?: string; channel?: string; folder?: string }) => {
       const f = new FormData();
       f.set('type', p.type);
       f.set('title', p.title);
@@ -190,6 +190,8 @@ export function useCreateSource(projectId?: string | null) {
       if (p.file) f.set('file', p.file);
       if (p.repo) f.set('repo', p.repo);
       if (p.branch) f.set('branch', p.branch);
+      if (p.channel) f.set('channel', p.channel);
+      if (p.folder) f.set('folder', p.folder);
       return api<{ source: SourceDto; jobId: string }>(`/api/projects/${projectId}/sources`, { method: 'POST', body: f });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.sources(projectId ?? '') }),
@@ -432,3 +434,25 @@ export interface RiskPersonDto { userId: string; name: string; role: 'PROJECT_LE
 export interface RiskTopicDto { label: string; sources: string[]; soleSource: string | null; claims: number; lastActivity: string | null; quiet: boolean }
 export interface RadarDto { busFactor: number; totalChunks: number; people: number; team: RiskPersonDto[]; topics: RiskTopicDto[]; access: { title: string; subject: string | null; sources: string[] }[]; outsideAuthors: string[]; hasClaims: boolean }
 export const useRadar = (projectId?: string | null) => useQuery({ queryKey: ['radar', projectId ?? ''], queryFn: () => api<RadarDto>(`/api/projects/${projectId}/risk`), enabled: on(projectId) });
+
+// ───────────── phases 6 and 7: connections, plans and billing ─────────────
+
+export type IntegrationKind = 'GITHUB' | 'SLACK' | 'GOOGLE_DRIVE';
+export interface IntegrationDto { kind: IntegrationKind; connected: boolean; hint: string | null; updatedAt: string | null; updatedByName: string | null }
+export const useIntegrations = () => useQuery({ queryKey: ['integrations'], queryFn: () => api<IntegrationDto[]>('/api/integrations') });
+export function useIntegrationMutations() {
+  const qc = useQueryClient();
+  const inv = () => qc.invalidateQueries({ queryKey: ['integrations'] });
+  const save = useMutation({ mutationFn: (p: { kind: IntegrationKind; secret: string }) => api<IntegrationDto>(`/api/admin/integrations/${p.kind}`, { method: 'PUT', json: { secret: p.secret } }), onSuccess: inv });
+  const remove = useMutation({ mutationFn: (kind: IntegrationKind) => api<void>(`/api/admin/integrations/${kind}`, { method: 'DELETE' }), onSuccess: inv });
+  const test = useMutation({ mutationFn: (p: { kind: IntegrationKind; secret?: string }) => api<{ ok: boolean; message: string }>(`/api/admin/integrations/${p.kind}/test`, { method: 'POST', json: { secret: p.secret ?? '' } }) });
+  return { save, remove, test };
+}
+
+export interface PlanLimits { people: number; projects: number; sources: number }
+export interface BillingDto {
+  plan: 'FREE' | 'TEAM'; paidUntil: string | null; unlimited: boolean; limits: PlanLimits; usage: { PEOPLE: number; PROJECTS: number; SOURCES: number };
+  freeLimits: PlanLimits; teamLimits: PlanLimits; teamPriceMinor: number; currency: string; paymentsEnabled: boolean;
+}
+export const useBilling = () => useQuery({ queryKey: ['billing'], queryFn: () => api<BillingDto>('/api/admin/billing') });
+export const useCheckout = () => useMutation({ mutationFn: () => api<{ url: string }>('/api/admin/billing/checkout', { method: 'POST' }) });

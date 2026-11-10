@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.bramhastra.baton.audit.AuditService;
+import com.bramhastra.baton.billing.BillingService;
 import com.bramhastra.baton.common.ApiException;
 import com.bramhastra.baton.common.ErrorCode;
 import com.bramhastra.baton.common.Sensitivity;
@@ -49,9 +50,12 @@ public class SourceController {
     private final AuditService audit;
     private final JdbcClient jdbc;
 
+    private final BillingService billing;
+
     public SourceController(SourceRepository sources, List<SourceConnector> connectors, JobRepository jobs,
                             CryptoService crypto, CurrentUserProvider currentUser, AccessPolicy access,
-                            AuditService audit, JdbcClient jdbc) {
+                            AuditService audit, JdbcClient jdbc, BillingService billing) {
+        this.billing = billing;
         this.sources = sources;
         this.connectors = connectors;
         this.jobs = jobs;
@@ -77,6 +81,8 @@ public class SourceController {
                                 @RequestParam(defaultValue = "false") boolean authorisationAttested,
                                 @RequestParam(required = false) String repo,
                                 @RequestParam(required = false) String branch,
+                                @RequestParam(required = false) String channel,
+                                @RequestParam(required = false) String folder,
                                 @RequestParam(required = false) MultipartFile file) throws IOException {
         CurrentUser me = currentUser.get();
         access.requireMember(me, projectId);
@@ -113,6 +119,11 @@ public class SourceController {
             if (branch != null && !branch.isBlank()) {
                 config.put("branch", branch.strip());
             }
+        } else if (type == SourceType.SLACK) {
+            config.put("channel", channel == null ? "" : channel.strip().toLowerCase(java.util.Locale.ROOT).startsWith("#")
+                    ? channel.strip().toLowerCase(java.util.Locale.ROOT) : channel.strip());
+        } else if (type == SourceType.GOOGLE_DRIVE) {
+            config.put("folder", folder == null ? "" : folder.strip());
         } else {
             if (file == null || file.isEmpty()) {
                 throw new ApiException(ErrorCode.VALIDATION_FAILED, "Request validation failed",
@@ -134,6 +145,7 @@ public class SourceController {
             throw new ApiException(ErrorCode.VALIDATION_FAILED, e.getMessage());
         }
 
+        billing.requireRoom(BillingService.Resource.SOURCES);
         UUID sourceId = sources.insert(projectId, type, title.strip(), config, sensitivity, groups, me.id());
         if (staged != null) {
             sources.stageFile(sourceId, staged, crypto.encrypt(staged.bytes()));
@@ -163,7 +175,7 @@ public class SourceController {
         return sources.listDocuments(visible(sourceId).id());
     }
 
-    /** Re-sync a GitHub source. Uploaded files are re-synced by uploading again. */
+    /** Re-sync a live source (GitHub, Slack, Google Drive). Uploaded files are re-synced by uploading again. */
     @PostMapping("/sources/{sourceId}/sync")
     @ResponseStatus(HttpStatus.ACCEPTED)
     @Transactional
@@ -171,7 +183,7 @@ public class SourceController {
         CurrentUser me = currentUser.get();
         SourceRow s = visible(sourceId);
         access.requireLead(me, s.projectId());
-        if (s.type() != SourceType.GITHUB) {
+        if (!s.type().isLive()) {
             throw new ApiException(ErrorCode.INVALID_TRANSITION, "Upload the file again to refresh this source");
         }
         if (s.status() == SourceRow.SourceStatus.SYNCING || s.status() == SourceRow.SourceStatus.PENDING) {

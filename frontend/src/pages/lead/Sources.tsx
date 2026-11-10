@@ -1,17 +1,18 @@
-import { AlertTriangle, FileText, GitBranch, Hash, KanbanSquare, MessageSquareQuote, NotebookPen, RefreshCw, ShieldCheck, Upload, X, type LucideIcon } from 'lucide-react';
+import { FolderOpen, MessagesSquare, AlertTriangle, FileText, GitBranch, Hash, KanbanSquare, MessageSquareQuote, NotebookPen, RefreshCw, ShieldCheck, Upload, X, type LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Chip, SensitivityChip, StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Field, Input, Segmented } from '@/components/ui/form';
 import { Banner, Card, CardHeader, IconTile, PageHeader, Progress, QueryState, WorkflowStepper } from '@/components/ui/misc';
-import { SOURCE_TYPE_LABEL, fmtDateTime, sens, useCreateSource, useSourceList, useSyncSource, type SensitivityDto, type SourceDto, type SourceTypeDto } from '@/data/live';
+import { SOURCE_TYPE_LABEL, fmtDateTime, sens, useCreateSource, useSourceList, useSyncSource, type SensitivityDto, type SourceDto, type SourceTypeDto, useIntegrations, type IntegrationKind,
+} from '@/data/live';
 import type { Status } from '@/data/types';
 import { useSession } from '@/lib/auth';
 import { ApiError } from '@/lib/http';
 
 const KIND_ICON: Record<SourceTypeDto, LucideIcon> = {
-  GITHUB: GitBranch, TASK_CSV: KanbanSquare, DOCUMENT: FileText, MEETING_NOTES: NotebookPen, CHAT_EXPORT: Hash, TESTIMONY: MessageSquareQuote,
+  GITHUB: GitBranch, SLACK: MessagesSquare, GOOGLE_DRIVE: FolderOpen, TASK_CSV: KanbanSquare, DOCUMENT: FileText, MEETING_NOTES: NotebookPen, CHAT_EXPORT: Hash, TESTIMONY: MessageSquareQuote,
 };
 const STATE: Record<SourceDto['status'], { s: Status; l: string }> = {
   PENDING: { s: 'stale', l: 'Queued' }, SYNCING: { s: 'single', l: 'Syncing…' }, READY: { s: 'verified', l: 'Ready' }, FAILED: { s: 'conflicting', l: 'Failed' },
@@ -38,7 +39,7 @@ function SourceRow({ s, onSync, syncing }: { s: SourceDto; onSync?: () => void; 
           <StatusBadge status={st.s} label={st.l} />
           <span className="text-caption text-ink-500">{s.redactionCount} redacted{s.lastSyncedAt ? ` · ${fmtDateTime(s.lastSyncedAt)}` : ''}</span>
         </div>
-        {s.type === 'GITHUB' && onSync && (
+        {(s.type === 'GITHUB' || s.type === 'SLACK' || s.type === 'GOOGLE_DRIVE') && onSync && (
           <button type="button" aria-label={`Re-sync ${s.title}`} disabled={syncing} onClick={onSync} className="rounded p-1 text-ink-400 hover:text-ink-900 cursor-pointer disabled:opacity-40"><RefreshCw className="size-[18px]" /></button>
         )}
       </div>
@@ -111,8 +112,15 @@ const TYPES: { id: SourceTypeDto; label: string; accept?: string }[] = [
   { id: 'MEETING_NOTES', label: 'Meeting notes', accept: '.md,.txt,.pdf,.docx' },
   { id: 'DOCUMENT', label: 'Document', accept: '.md,.txt,.pdf,.docx' },
   { id: 'TASK_CSV', label: 'Task board CSV', accept: '.csv' },
-  { id: 'GITHUB', label: 'GitHub repository' },
+  { id: 'GITHUB', label: 'GitHub repository (live)' },
+  { id: 'SLACK', label: 'Slack channel (live)' },
+  { id: 'GOOGLE_DRIVE', label: 'Google Drive folder (live)' },
 ];
+const LIVE: Partial<Record<SourceTypeDto, { kind: IntegrationKind; field: string; placeholder: string; help: string; needs: boolean }>> = {
+  GITHUB: { kind: 'GITHUB', field: 'Repository (owner/name)', placeholder: 'northfield-club/annapurna', help: 'Public repositories work without a connection; private ones need a GitHub token.', needs: false },
+  SLACK: { kind: 'SLACK', field: 'Channel', placeholder: '#dev', help: 'The last 90 days of the channel. Add your Slack app to the channel first (/invite @app).', needs: true },
+  GOOGLE_DRIVE: { kind: 'GOOGLE_DRIVE', field: 'Folder link', placeholder: 'https://drive.google.com/drive/folders/…', help: 'Google Docs and text files in the folder. Share the folder with your service account as Viewer.', needs: true },
+};
 const LEVELS = ['Public', 'Internal', 'Confidential', 'Restricted'] as const;
 
 function AddSourceModal({ onClose }: { onClose: () => void }) {
@@ -122,12 +130,16 @@ function AddSourceModal({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [repo, setRepo] = useState('');
+  const { data: integrations = [] } = useIntegrations();
   const [level, setLevel] = useState<(typeof LEVELS)[number]>('Internal');
   const [groups, setGroups] = useState<string[]>([]);
   const [groupDraft, setGroupDraft] = useState('');
   const [authorised, setAuthorised] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const t = TYPES.find(x => x.id === type)!;
+  const live = LIVE[type];
+  const connected = !!live && integrations.some(i => i.kind === live.kind && i.connected);
+  const blocked = !!live && live.needs && !connected;
   const clearanceIdx = LEVELS.indexOf(user.clearance);
 
   useEffect(() => {
@@ -139,13 +151,14 @@ function AddSourceModal({ onClose }: { onClose: () => void }) {
 
   const err = create.error instanceof ApiError ? create.error : null;
   const fieldErrors = (err?.details && typeof err.details === 'object' ? err.details : {}) as Record<string, string>;
-  const ok = authorised && title.trim() && (type === 'GITHUB' ? repo.trim() : file);
+  const ok = authorised && title.trim() && !blocked && (live ? repo.trim() : file);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!ok) return;
     create.mutate(
-      { type, title: title.trim(), sensitivity: level.toUpperCase() as SensitivityDto, aclGroups: groups, file: file ?? undefined, repo: repo.trim() || undefined },
+      { type, title: title.trim(), sensitivity: level.toUpperCase() as SensitivityDto, aclGroups: groups, file: file ?? undefined, repo: type === 'GITHUB' ? repo.trim() || undefined : undefined,
+        channel: type === 'SLACK' ? repo.trim() : undefined, folder: type === 'GOOGLE_DRIVE' ? repo.trim() : undefined },
       { onSuccess: onClose },
     );
   };
@@ -170,7 +183,7 @@ function AddSourceModal({ onClose }: { onClose: () => void }) {
           <div className="flex max-h-[70dvh] flex-col gap-[18px] overflow-y-auto p-6">
             <Field label="Type">
               {id => (
-                <select id={id} value={type} onChange={e => { setType(e.target.value as SourceTypeDto); setFile(null); }} className="w-full rounded-lg border border-line-strong bg-card px-3 py-2.5 text-body outline-none focus:border-brand-600">
+                <select id={id} value={type} onChange={e => { setType(e.target.value as SourceTypeDto); setFile(null); setRepo(''); }} className="w-full rounded-lg border border-line-strong bg-card px-3 py-2.5 text-body outline-none focus:border-brand-600">
                   {TYPES.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
                 </select>
               )}
@@ -178,8 +191,11 @@ function AddSourceModal({ onClose }: { onClose: () => void }) {
             <Field label="Title" hint={fieldErrors.title && <p className="text-caption text-conflict">{fieldErrors.title}</p>}>
               {id => <Input id={id} value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Slack #dev" maxLength={200} invalid={!!fieldErrors.title} />}
             </Field>
-            {type === 'GITHUB' ? (
-              <Field label="Repository (owner/name)">{id => <Input id={id} value={repo} onChange={e => setRepo(e.target.value)} placeholder="northfield-club/annapurna" />}</Field>
+            {live ? (
+              <>
+                {blocked && <Banner tone="inferred" icon={AlertTriangle}>{SOURCE_TYPE_LABEL[type]} isn’t connected for this workspace yet. An admin connects it under <strong>Organisation → Connections</strong>.</Banner>}
+                <Field label={live.field} hint={<p className="text-caption text-ink-500">{live.help}{type === 'GITHUB' && (connected ? ' A token is connected.' : '')}</p>}>{id => <Input id={id} value={repo} onChange={e => setRepo(e.target.value)} placeholder={live.placeholder} disabled={blocked} autoCapitalize="none" spellCheck={false} />}</Field>
+              </>
             ) : (
               <Field label="File" hint={<p className={fieldErrors.file ? 'text-caption text-conflict' : 'text-caption text-ink-500'}>{fieldErrors.file ?? 'Up to 25 MB.'}</p>}>
                 {id => <input id={id} type="file" accept={t.accept} onChange={e => { const f = e.target.files?.[0] ?? null; setFile(f); if (f && !title) setTitle(f.name.replace(/\.[^.]+$/, '')); }} className="text-small file:mr-3 file:rounded-lg file:border file:border-line-strong file:bg-card file:px-3 file:py-2 file:text-small file:font-medium" />}
@@ -212,7 +228,7 @@ function AddSourceModal({ onClose }: { onClose: () => void }) {
                 label={<><span className="block font-medium text-ink-900">I confirm I’m authorised to share this source with Baton for this handover.</span><span className="mt-1 block text-caption text-ink-500">Baton redacts emails, phone numbers, API keys and passwords before any AI call. Only redacted text reaches the model.</span></>}
               />
             </div>
-            {err && !Object.keys(fieldErrors).length && <Banner tone="conflict" icon={AlertTriangle}>{err.message}</Banner>}
+            {err && (!Object.keys(fieldErrors).length || err.code === 'PLAN_LIMIT') && <Banner tone="conflict" icon={AlertTriangle}>{err.message}</Banner>}
           </div>
           <div className="flex justify-end gap-2 border-t border-line bg-canvas px-6 py-4">
             <Button type="button" kind="ghost" onClick={onClose}>Cancel</Button>

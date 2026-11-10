@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.bramhastra.baton.audit.AuditService;
+import com.bramhastra.baton.billing.BillingService;
 import com.bramhastra.baton.common.ApiException;
 import com.bramhastra.baton.common.ErrorCode;
 import com.bramhastra.baton.security.CurrentUser;
@@ -25,8 +26,11 @@ public class ProjectAdminService {
     private final AuditService audit;
     private final JdbcClient jdbc;
 
+    private final BillingService billing;
+
     public ProjectAdminService(ProjectRepository projects, ProjectMemberRepository members, AppUserRepository users,
-                               AuditService audit, JdbcClient jdbc) {
+                               AuditService audit, JdbcClient jdbc, BillingService billing) {
+        this.billing = billing;
         this.projects = projects;
         this.members = members;
         this.users = users;
@@ -106,6 +110,7 @@ public class ProjectAdminService {
         if (taken) {
             throw new ApiException(ErrorCode.ALREADY_EXISTS, "A project with that name already exists");
         }
+        billing.requireRoom(BillingService.Resource.PROJECTS);
         AppUser lead = activeUser(leadUserId);
         Project p = new Project();
         p.setName(n);

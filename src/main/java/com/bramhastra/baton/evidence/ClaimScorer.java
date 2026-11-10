@@ -52,8 +52,8 @@ public class ClaimScorer {
     public static int trustTier(SourceType type) {
         return switch (type) {
             case GITHUB, TASK_CSV -> 3;          // systems of record
-            case DOCUMENT, MEETING_NOTES, TESTIMONY -> 2;
-            case CHAT_EXPORT -> 1;
+            case DOCUMENT, MEETING_NOTES, TESTIMONY, GOOGLE_DRIVE -> 2;
+            case CHAT_EXPORT, SLACK -> 1;
         };
     }
 
@@ -128,9 +128,9 @@ public class ClaimScorer {
         return switch (t) {
             case GITHUB -> "repo";
             case TASK_CSV -> "task board";
-            case DOCUMENT -> "document";
+            case DOCUMENT, GOOGLE_DRIVE -> "document";
             case MEETING_NOTES -> "meeting notes";
-            case CHAT_EXPORT -> "chat";
+            case CHAT_EXPORT, SLACK -> "chat";
             case TESTIMONY -> "testimony";
         };
     }

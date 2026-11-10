@@ -9,6 +9,8 @@ public enum ErrorCode {
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED),
     /** Sign-in, sign-up or workspace lookup called too often from one address or for one account. */
     TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS),
+    /** The workspace's plan does not allow adding more of something. */
+    PLAN_LIMIT(HttpStatus.PAYMENT_REQUIRED),
     FORBIDDEN_ROLE(HttpStatus.FORBIDDEN),
     SHARE_INACTIVE(HttpStatus.FORBIDDEN),
     /** Missing OR not visible. Never reveal that a hidden resource exists. */

@@ -167,6 +167,32 @@ public class TenantRegistry {
         return byId(id).orElseThrow();
     }
 
+    /** Until when the workspace's paid plan runs; null if it never paid. */
+    public java.time.Instant paidUntil(UUID id) {
+        return control.sql("SELECT paid_until FROM control.tenant WHERE id = :id").param("id", id)
+                .query((rs, n) -> rs.getTimestamp(1) == null ? null : rs.getTimestamp(1).toInstant())
+                .optional().orElse(null);
+    }
+
+    /**
+     * Records a payment once and extends the plan by a month from whichever is later, now or the current end.
+     * Returns the new end, or null if this payment was already recorded.
+     */
+    public java.time.Instant recordPayment(Tenant t, String providerRef, long amountMinor, String currency) {
+        int inserted = control.sql("""
+                INSERT INTO control.payment (provider_ref, tenant_id, tenant_slug, amount_minor, currency)
+                VALUES (:ref, :id, :slug, :amount, :cur) ON CONFLICT (provider_ref) DO NOTHING
+                """).param("ref", providerRef).param("id", t.id()).param("slug", t.slug()).param("amount", amountMinor)
+                .param("cur", currency).update();
+        if (inserted == 0) {
+            return null;
+        }
+        return control.sql("""
+                UPDATE control.tenant SET paid_until = GREATEST(COALESCE(paid_until, now()), now()) + interval '1 month'
+                WHERE id = :id RETURNING paid_until
+                """).param("id", t.id()).query((rs, n) -> rs.getTimestamp(1).toInstant()).single();
+    }
+
     /** Where a company workspace's database is (host, port, database name), for its admins. Null for the demo. */
     public DatabaseUrl connection(Tenant t) {
         if (t.usesHomeDb()) {

@@ -22,6 +22,7 @@ import { AskPage } from '@/pages/recipient/AskPage';
 import { AuditLog, ProjectsPage, TeamPage, UsersGroups } from '@/pages/admin/AdminPages';
 import { DisconnectedPage, WorkspaceSettings } from '@/pages/admin/WorkspaceSettings';
 import { AiSettings } from '@/pages/admin/AiSettings';
+import { Billing, Connections } from '@/pages/admin/ConnectionsBilling';
 import { DatabaseGuide } from '@/pages/public/DatabaseGuide';
 import './index.css';
 
@@ -86,6 +87,8 @@ createRoot(document.getElementById('root')!).render(
               <Route path="admin/audit" element={<RequireAdmin><AuditLog /></RequireAdmin>} />
               <Route path="admin/workspace" element={<RequireAdmin><WorkspaceSettings /></RequireAdmin>} />
               <Route path="admin/ai" element={<RequireAdmin><AiSettings /></RequireAdmin>} />
+              <Route path="admin/connections" element={<RequireAdmin><Connections /></RequireAdmin>} />
+              <Route path="admin/billing" element={<RequireAdmin><Billing /></RequireAdmin>} />
             </Route>
 
             <Route path="/interview" element={<RequireRole roles={['leaver']}><ExitInterview /></RequireRole>} />

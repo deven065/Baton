@@ -52,6 +52,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/options").permitAll()
+                        // Razorpay calls this; it is authenticated by its HMAC signature.
+                        .requestMatchers(HttpMethod.POST, "/api/billing/razorpay/webhook").permitAll()
                         // Workspace sign-up and the sign-in page's "does this workspace exist" lookup.
                         .requestMatchers(HttpMethod.POST, "/api/workspaces").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/workspaces/*").permitAll()

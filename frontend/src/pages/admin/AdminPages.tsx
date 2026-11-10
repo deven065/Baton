@@ -25,7 +25,7 @@ const errText = (e: unknown) => {
   if (!e) return null;
   const a = e instanceof ApiError ? e : null;
   const d = (a?.details ?? null) as Record<string, string> | null;
-  return d ? Object.values(d).join(' ') : (e as Error).message;
+  return d && a?.code !== 'PLAN_LIMIT' ? Object.values(d).join(' ') : (e as Error).message;
 };
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {

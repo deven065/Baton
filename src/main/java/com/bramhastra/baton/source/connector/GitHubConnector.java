@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
+import com.bramhastra.baton.integration.IntegrationService;
 import com.bramhastra.baton.source.SourceType;
 
 import tools.jackson.databind.JsonNode;
@@ -33,19 +34,33 @@ public class GitHubConnector implements SourceConnector {
 
     private final RestClient http;
     private final ObjectMapper json;
+    private final IntegrationService integrations;
+    private final String serverToken;
+    /** The token for the fetch running on this thread (the workspace's own, else the server's, else none). */
+    private final ThreadLocal<String> token = new ThreadLocal<>();
 
-    public GitHubConnector(ObjectMapper json,
+    public GitHubConnector(ObjectMapper json, IntegrationService integrations,
                            @Value("${baton.github.api-url:https://api.github.com}") String apiUrl,
-                           @Value("${baton.github.token:}") String token) {
-        RestClient.Builder b = RestClient.builder().baseUrl(apiUrl)
+                           @Value("${baton.github.token:}") String serverToken) {
+        this.http = RestClient.builder().baseUrl(apiUrl)
                 .defaultHeader(HttpHeaders.ACCEPT, "application/vnd.github+json")
                 .defaultHeader("X-GitHub-Api-Version", "2022-11-28")
-                .defaultHeader(HttpHeaders.USER_AGENT, "baton-handover");
-        if (token != null && !token.isBlank()) {
-            b.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token);
-        }
-        this.http = b.build();
+                .defaultHeader(HttpHeaders.USER_AGENT, "baton-handover").build();
         this.json = json;
+        this.integrations = integrations;
+        this.serverToken = serverToken == null ? "" : serverToken.strip();
+    }
+
+    /** Checks a token: returns the GitHub login it belongs to. */
+    public String test(String candidate) {
+        token.set(candidate);
+        try {
+            return text(get("/user"), "login");
+        } catch (HttpClientErrorException e) {
+            throw new IllegalArgumentException("GitHub refused the token (HTTP " + e.getStatusCode().value() + ")");
+        } finally {
+            token.remove();
+        }
     }
 
     @Override
@@ -63,6 +78,20 @@ public class GitHubConnector implements SourceConnector {
 
     @Override
     public List<RawDocument> fetch(FetchRequest request, Consumer<String> status) {
+        token.set(integrations.secret(IntegrationService.Kind.GITHUB).orElse(serverToken));
+        try {
+            return read(request, status);
+        } catch (HttpClientErrorException.NotFound e) {
+            throw new IllegalArgumentException("GitHub cannot find that repository. If it is private, connect a token "
+                    + "that can read it under Organisation → Connections");
+        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden e) {
+            throw new IllegalArgumentException("GitHub refused access (bad or expired token, or the rate limit was hit)");
+        } finally {
+            token.remove();
+        }
+    }
+
+    private List<RawDocument> read(FetchRequest request, Consumer<String> status) {
         String repo = request.config().get("repo").toString();
         List<RawDocument> docs = new ArrayList<>();
 
@@ -171,14 +200,21 @@ public class GitHubConnector implements SourceConnector {
     }
 
     private JsonNode get(String uri) {
-        String body = http.get().uri(uri).retrieve().body(String.class);
+        String body = http.get().uri(uri).headers(this::auth).retrieve().body(String.class);
         return json.readTree(body == null ? "null" : body);
     }
 
     private String raw(String uri) {
-        String body = http.get().uri(uri).header(HttpHeaders.ACCEPT, "application/vnd.github.raw+json")
+        String body = http.get().uri(uri).headers(this::auth).header(HttpHeaders.ACCEPT, "application/vnd.github.raw+json")
                 .retrieve().body(String.class);
         return body == null ? "" : body;
+    }
+
+    private void auth(HttpHeaders h) {
+        String t = token.get();
+        if (t != null && !t.isBlank()) {
+            h.setBearerAuth(t);
+        }
     }
 
     private static Instant instant(String iso) {

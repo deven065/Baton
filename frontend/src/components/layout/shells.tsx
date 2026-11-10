@@ -1,5 +1,5 @@
 import {
-  Database, Sparkles, Radar, TrendingUp,
+  Database, Sparkles, Cable, CreditCard, Radar, TrendingUp,
   AlertTriangle, FolderKanban, UsersRound, Bell, CheckSquare, ChevronDown, ChevronRight, Clock, Eye, FileText, Home, Layers, LogOut, Menu, Plug, Search, Share2, ShieldCheck, Users, X,
   type LucideIcon,
 } from 'lucide-react';
@@ -29,7 +29,9 @@ const NAV_ADMIN: Nav[] = [
   { to: '/app/admin/users', label: 'People & groups', icon: Users },
   { to: '/app/admin/projects', label: 'Projects', icon: FolderKanban },
   { to: '/app/admin/audit', label: 'Audit log', icon: FileText },
+  { to: '/app/admin/connections', label: 'Connections', icon: Cable },
   { to: '/app/admin/ai', label: 'AI', icon: Sparkles },
+  { to: '/app/admin/billing', label: 'Billing', icon: CreditCard },
   { to: '/app/admin/workspace', label: 'Workspace', icon: Database },
 ];
 const NAV_TEAM: Nav = { to: '/app/team', label: 'Team', icon: UsersRound };
@@ -39,7 +41,7 @@ const PAGE: Record<string, string> = {
   '/app': 'Dashboard', '/app/sources': 'Sources', '/app/reconstruct': 'Reconstruct', '/app/review': 'Review',
   '/app/conflicts': 'Conflicts', '/app/timeline': 'Timeline', '/app/view-as': 'View as', '/app/approval': 'Approval',
   '/app/share': 'Share', '/app/admin/users': 'People & groups', '/app/admin/projects': 'Projects',
-  '/app/admin/audit': 'Audit log', '/app/admin/workspace': 'Workspace', '/app/admin/ai': 'AI', '/app/team': 'Team', '/app/risk': 'Knowledge risk', '/app/successors': 'Successors',
+  '/app/admin/audit': 'Audit log', '/app/admin/workspace': 'Workspace', '/app/admin/ai': 'AI', '/app/admin/connections': 'Connections', '/app/admin/billing': 'Billing', '/app/team': 'Team', '/app/risk': 'Knowledge risk', '/app/successors': 'Successors',
 };
 
 function NavItem({ item, onClick }: { item: Nav; onClick?: () => void }) {

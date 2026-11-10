@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.bramhastra.baton.audit.AuditService;
+import com.bramhastra.baton.billing.BillingService;
 import com.bramhastra.baton.common.ApiException;
 import com.bramhastra.baton.common.ErrorCode;
 import com.bramhastra.baton.common.Sensitivity;
@@ -47,10 +48,12 @@ public class AdminService {
     private final AuditService audit;
     private final JdbcClient jdbc;
     private final PasswordResetService resets;
+    private final BillingService billing;
     private final SecureRandom random = new SecureRandom();
 
     public AdminService(AppUserRepository users, UserGroupRepository groups, PasswordEncoder passwords,
-                        AuditService audit, JdbcClient jdbc, PasswordResetService resets) {
+                        AuditService audit, JdbcClient jdbc, PasswordResetService resets, BillingService billing) {
+        this.billing = billing;
         this.users = users;
         this.groups = groups;
         this.passwords = passwords;
@@ -98,6 +101,7 @@ public class AdminService {
         if (users.findByEmailIgnoreCase(email).isPresent()) {
             throw new ApiException(ErrorCode.ALREADY_EXISTS, "Someone in this workspace already uses that email");
         }
+        billing.requireRoom(BillingService.Resource.PEOPLE);
         String temp = temporaryPassword();
         AppUser u = new AppUser();
         u.setEmail(email);
@@ -148,6 +152,9 @@ public class AdminService {
             if (!p.active() && (self || (u.getOrgRole() == OrgRole.ADMIN && otherActiveAdmins(u) == 0))) {
                 throw new ApiException(ErrorCode.NOT_ALLOWED,
                         self ? "You can’t deactivate your own account" : "The workspace needs at least one active admin");
+            }
+            if (p.active()) {
+                billing.requireRoom(BillingService.Resource.PEOPLE);
             }
             u.setActive(p.active());
             changed.put("active", p.active());
