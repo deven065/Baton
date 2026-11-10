@@ -64,7 +64,7 @@ export function DatabaseGuide() {
           <Link to="/signup"><Button kind="primary">Create a workspace</Button></Link>
         </div>
       </header>
-      <main className="mx-auto flex max-w-[960px] flex-col gap-8 px-4 py-8 sm:py-12">
+      <main className="stagger mx-auto flex max-w-[960px] flex-col gap-8 px-4 py-8 sm:py-12">
         <div className="flex flex-col gap-3">
           <Link to="/signup" className="flex items-center gap-1.5 text-small text-ink-500 hover:text-ink-900"><ArrowLeft className="size-4" aria-hidden />Back to sign-up</Link>
           <h1 className="text-display font-bold">Connect your own database</h1>

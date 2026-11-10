@@ -76,7 +76,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   };
   return (
     <div className="flex h-full flex-col gap-1 p-4">
-      <Link to="/app" className="px-2 pt-1 pb-4"><Logo /></Link>
+      <Link to="/app" className="px-2 pt-1 pb-4"><Logo animate /></Link>
       <button type="button" className="flex items-center gap-2.5 rounded-xl border border-line bg-canvas p-2.5 text-left">
         <span className="grid size-8 place-items-center rounded-lg bg-brand-100 text-brand-700"><Layers className="size-4" aria-hidden /></span>
         <span className="flex-1">
@@ -85,7 +85,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </span>
         <ChevronDown className="size-3.5 text-ink-400" aria-hidden />
       </button>
-      <nav aria-label="Main" className="flex flex-col gap-1">
+      <nav aria-label="Main" className="stagger-side flex flex-col gap-1">
         {!isAdmin && (
           <>
             <p className="overline px-2.5 pt-4 pb-1.5 text-ink-400">Handover · {session?.handover?.departingName ?? 'none yet'}</p>
@@ -242,7 +242,7 @@ export function AppShell() {
             {user && <Avatar initials={user.initials} tone={user.tone} />}
           </div>
         </header>
-        <main className="flex flex-col gap-6 p-4 sm:p-8">
+        <main key={pathname} className="stagger flex flex-col gap-6 p-4 sm:p-8">
           <Outlet />
         </main>
       </div>
@@ -259,6 +259,7 @@ const TABS = [
 ];
 
 export function RecipientShell() {
+  const location = useLocation();
   const { user, signOut } = useAuth();
   const { view } = useCurrentShare();
   const navigate = useNavigate();
@@ -299,7 +300,7 @@ export function RecipientShell() {
           ))}
         </nav>
       </header>
-      <main className="mx-auto flex max-w-[1120px] flex-col gap-6 px-4 py-6 sm:py-8">
+      <main key={location.pathname} className="stagger mx-auto flex max-w-[1120px] flex-col gap-6 px-4 py-6 sm:py-8">
         <Outlet />
       </main>
     </div>
@@ -317,7 +318,7 @@ export function FocusShell({ title, right, children }: { title: string; right?: 
         </div>
         {right}
       </header>
-      <main className="mx-auto max-w-[1120px] px-4 py-6 sm:py-8">{children}</main>
+      <main className="animate-rise mx-auto max-w-[1120px] px-4 py-6 sm:py-8">{children}</main>
     </div>
   );
 }

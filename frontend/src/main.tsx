@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { StrictMode, type ReactNode } from 'react';
+import { StrictMode, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell, RecipientShell } from '@/components/layout/shells';
@@ -53,10 +53,42 @@ function Home() {
   return <Navigate to={user ? HOME[user.appRole] : '/login'} replace />;
 }
 
+/**
+ * Fades out the first-load splash from index.html once the session is known. The first visit in a browser
+ * session keeps it up long enough for the logo animation to finish; later loads just fade.
+ */
+// Read once per page load (not inside an effect, which React may run twice).
+const SPLASH_SEEN = (() => {
+  try {
+    const seen = sessionStorage.getItem('baton.splash') === '1';
+    sessionStorage.setItem('baton.splash', '1');
+    return seen;
+  } catch {
+    return false;
+  }
+})();
+
+function SplashGate() {
+  const { loading } = useAuth();
+  useEffect(() => {
+    if (loading) return;
+    const splash = document.getElementById('splash');
+    if (!splash) return;
+    const wait = SPLASH_SEEN ? 0 : Math.max(0, 1500 - performance.now());
+    const t = window.setTimeout(() => {
+      splash.classList.add('out');
+      window.setTimeout(() => splash.remove(), 600);
+    }, wait);
+    return () => window.clearTimeout(t);
+  }, [loading]);
+  return null;
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <SplashGate />
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Home />} />

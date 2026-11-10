@@ -10,15 +10,15 @@ import { ApiError, api, wakeApi } from '@/lib/http';
 
 function BrandPanel({ over, title, sub, children }: { over: string; title: string; sub: string; children?: ReactNode }) {
   return (
-    <aside className="hidden w-[640px] shrink-0 flex-col justify-between bg-inverse p-14 lg:flex">
-      <Logo dark />
-      <div className="flex flex-col gap-5">
+    <aside className="aurora hidden w-[640px] shrink-0 flex-col justify-between p-14 lg:flex">
+      <span className="animate-fade"><Logo dark animate /></span>
+      <div className="stagger flex flex-col gap-5">
         <p className="overline text-baton">{over}</p>
         <h1 className="max-w-[520px] text-display font-bold text-white">{title}</h1>
         <p className="max-w-[470px] text-body-l text-inverse-muted">{sub}</p>
-        {children && <div className="max-w-[528px]">{children}</div>}
+        {children && <div className="max-w-[528px]"><div className="animate-float">{children}</div></div>}
       </div>
-      <p className="text-caption text-inverse-muted">Synthetic demo data · Project Annapurna · Team Bramhastra</p>
+      <p className="animate-fade text-caption text-inverse-muted [animation-delay:0.6s]">Synthetic demo data · Project Annapurna · Team Bramhastra</p>
     </aside>
   );
 }
@@ -66,7 +66,7 @@ export function LoginPage() {
         </div>
       </BrandPanel>
       <div className="flex flex-1 items-center justify-center px-4 py-10">
-        <div className="flex w-full max-w-[400px] flex-col gap-[18px]">
+        <div className="stagger flex w-full max-w-[400px] flex-col gap-[18px]">
           <div className="lg:hidden"><Logo /></div>
           <div>
             <h1 className="text-h1 font-semibold">Sign in to Baton</h1>
@@ -122,7 +122,7 @@ export function InvitePage() {
 function SmallPage({ children }: { children: ReactNode }) {
   return (
     <div className="grid min-h-dvh place-items-center bg-canvas px-4 py-10">
-      <Card className="flex w-full max-w-[440px] flex-col gap-5 p-8 shadow-pop">
+      <Card className="stagger flex w-full max-w-[440px] flex-col gap-5 p-8 shadow-pop">
         <Logo />
         {children}
       </Card>

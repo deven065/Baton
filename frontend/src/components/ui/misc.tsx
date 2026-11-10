@@ -2,12 +2,12 @@ import { AlertTriangle, Check, FileText, RefreshCw, X, type LucideIcon } from 'l
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-export function Logo({ dark, size = 28, big }: { dark?: boolean; size?: number; big?: boolean }) {
+export function Logo({ dark, size = 28, big, animate }: { dark?: boolean; size?: number; big?: boolean; animate?: boolean }) {
   const bg = dark ? '#FFFFFF' : '#0E1726';
   const fg = dark ? '#0E1726' : '#FFFFFF';
   return (
     <span className="inline-flex items-center gap-2.5">
-      <svg width={size} height={size} viewBox="0 0 28 28" fill="none" aria-hidden>
+      <svg width={size} height={size} viewBox="0 0 28 28" fill="none" aria-hidden className={animate ? 'logo-draw' : undefined}>
         <rect width="28" height="28" rx="8" fill={bg} />
         <path d="M8.5 19.5 L19.5 8.5" stroke={fg} strokeWidth="4" strokeLinecap="round" />
         <circle cx="20.5" cy="19.5" r="2.5" fill="#E8A33D" />

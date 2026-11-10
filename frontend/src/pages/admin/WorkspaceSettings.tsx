@@ -101,7 +101,7 @@ export function DisconnectedPage() {
   };
   return (
     <div className="grid min-h-dvh place-items-center bg-canvas p-4">
-      <Card className="flex w-full max-w-[560px] flex-col gap-4 p-6">
+      <Card className="stagger flex w-full max-w-[560px] flex-col gap-4 p-6">
         <Logo />
         <h1 className="flex items-center gap-2 text-h1 font-semibold"><Check className="size-6 text-verified" aria-hidden />Workspace disconnected</h1>
         <p className="text-small text-ink-700">{state?.name ?? 'Your workspace'} is no longer connected to Baton. All of its data is still in your database, and Baton has deleted its copy of the connection details.</p>

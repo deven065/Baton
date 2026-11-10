@@ -15,16 +15,16 @@ const STEPS = ['Company', 'Database', 'First admin'] as const;
 function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh bg-card">
-      <aside className="hidden w-[520px] shrink-0 flex-col justify-between bg-inverse p-14 lg:flex">
-        <Logo dark />
-        <div className="flex flex-col gap-5">
+      <aside className="aurora hidden w-[520px] shrink-0 flex-col justify-between p-14 lg:flex">
+        <span className="animate-fade"><Logo dark animate /></span>
+        <div className="stagger flex flex-col gap-5">
           <p className="overline text-baton">Your data stays yours</p>
           <h1 className="text-display font-bold text-white">Baton runs on your own database.</h1>
           <p className="text-body-l text-inverse-muted">
             Everything your team adds — people, sources, claims, exit interviews, the audit log — is stored in a Postgres
             database in <em>your</em> account. Baton keeps only your workspace name and the encrypted connection to it.
           </p>
-          <ul className="flex flex-col gap-3 text-small text-white">
+          <ul className="stagger-side flex flex-col gap-3 text-small text-white">
             {['Change your database password and Baton loses access instantly', 'Secrets and personal data are redacted before any AI call', 'Each workspace has its own encryption key'].map(t => (
               <li key={t} className="flex items-start gap-2.5"><Check className="mt-0.5 size-4 shrink-0 text-baton" aria-hidden />{t}</li>
             ))}
@@ -122,7 +122,7 @@ export function SignupWizard() {
 
   return (
     <Shell>
-      <form onSubmit={next} className="flex w-full max-w-[480px] flex-col gap-5" noValidate>
+      <form onSubmit={next} className="stagger flex w-full max-w-[480px] flex-col gap-5" noValidate>
         <div className="lg:hidden"><Logo /></div>
         <ol className="flex items-center gap-2" aria-label="Sign-up steps">
           {STEPS.map((s, i) => (
