@@ -708,7 +708,7 @@ decides each person's role. The Figma plugin that draws the product design (file
 ## 19. Testing
 
 ```bash
-./mvnw test          # 104 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
+./mvnw test          # 107 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
 cd frontend && npx tsc -b --noEmit && npm run build
 ```
 
@@ -739,7 +739,7 @@ dashboard", "renewal is due on 2026-12-01"); a model is expected to find them.
 | Evidence | `QuoteMatcherTest`, `ClaimScorerTest` |
 | Ingest | `RedactorTest`, `ChunkerTest`, `ConnectorTest`, `SourceIngestApiTest` |
 | Identity and access | `IdentityApiTest`, `AccessPolicyTest`, `PasswordResetApiTest`, `RbacMatrixTest` (every endpoint × every role) |
-| Reconstruction and review | `OfflineExtractorTest`, `ReconstructApiTest`, `ReviewApiTest` |
+| Reconstruction and review | `OfflineExtractorTest`, `ReconstructApiTest`, `ReviewApiTest`, `ConflictDecisionTest` (a conflict decision survives re-runs) |
 | Workspaces and admin | `WorkspaceApiTest`, `DatabaseUrlTest`, `CompanyAdminApiTest`, `HardeningApiTest`, `SafeLogTest` |
 | Handover lifecycle | `HandoverStateMachineTest`, `LifecycleApiTest`, `HandoverFeaturesApiTest` |
 | AI, connectors, billing | `AiSettingsApiTest`, `ConnectorsAndBillingApiTest` (fake AI, Slack, Google and Razorpay servers) |

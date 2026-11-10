@@ -81,7 +81,7 @@ To sign up a test company against a local database, start the API with `ALLOW_PR
 ## Tests
 
 ```bash
-./mvnw test                   # 104 tests against a real pgvector container (needs Docker)
+./mvnw test                   # 107 tests against a real pgvector container (needs Docker)
 ```
 
 They also run on every push in [GitHub Actions](.github/workflows/ci.yml), together with the frontend build.
