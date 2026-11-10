@@ -32,7 +32,8 @@ How a handover flows: **sources → redact → reconstruct → review → approv
 Trust rules the code enforces, not the AI:
 - A claim is shown as fact only if its quote is found word for word in a source the reader may see.
 - Secrets and personal data are redacted before anything is stored or sent to a model.
-- Permissions filter every search, claim and handover; hidden things return 404.
+- Permissions are checked by the API on every request (not just hidden in the UI); hidden things return 404, and
+  role changes apply instantly, even to people already signed in.
 - Approval is blocked while conflicts, unreviewed critical claims or undecided inferred claims remain.
 
 ## Tech stack
@@ -79,7 +80,7 @@ To sign up a test company against a local database, start the API with `ALLOW_PR
 ## Tests
 
 ```bash
-./mvnw test                   # 84 tests against a real pgvector container (needs Docker)
+./mvnw test                   # 89 tests against a real pgvector container (needs Docker)
 ```
 
 ## Configuration

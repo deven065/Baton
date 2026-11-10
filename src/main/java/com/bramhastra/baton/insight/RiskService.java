@@ -18,6 +18,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.bramhastra.baton.common.ApiException;
 import com.bramhastra.baton.common.Sensitivity;
 import com.bramhastra.baton.security.AccessPolicy;
 import com.bramhastra.baton.security.CurrentUser;
@@ -58,7 +59,14 @@ public class RiskService {
 
     @Transactional(readOnly = true)
     public Radar radar(CurrentUser me, UUID projectId) {
-        if (!me.isAdmin()) {
+        if (me.isAdmin()) {
+            // Admins see every project in their own workspace, and nothing else: an id from anywhere else is 404.
+            boolean exists = jdbc.sql("SELECT count(*) FROM project WHERE id = :p").param("p", projectId)
+                    .query(Integer.class).single() > 0;
+            if (!exists) {
+                throw ApiException.notFound();
+            }
+        } else {
             policy.requireLead(me, projectId);
         }
         List<Map<String, Object>> members = jdbc.sql("""

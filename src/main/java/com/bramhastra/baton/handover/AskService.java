@@ -93,8 +93,9 @@ public class AskService {
             throw new ApiException(ErrorCode.VALIDATION_FAILED, "Request validation failed",
                     Map.of("question", "Ask in 3 to 500 characters"));
         }
-        limits.acquire("ask:" + shareId, 30, Duration.ofMinutes(10));
+        // Ownership first: only the share's own recipient may spend its allowance.
         ShareService.Visible v = shares.visible(me, shareId);
+        limits.acquire("ask:" + shareId, 30, Duration.ofMinutes(10));
         List<Map<String, Object>> top = rank(q, v.claims());
         audit.record(me.id(), "SHARE_ASKED", "handover_share", shareId, v.share().projectId(),
                 Map.of("matches", top.size()));
@@ -249,8 +250,8 @@ public class AskService {
             throw new ApiException(ErrorCode.VALIDATION_FAILED, "Request validation failed",
                     Map.of("question", "Ask in 3 to 500 characters"));
         }
-        limits.acquire("ask-route:" + shareId, 10, Duration.ofHours(1));
         ShareService.Share s = shares.requireMine(me, shareId);
+        limits.acquire("ask-route:" + shareId, 10, Duration.ofHours(1));
         Handover h = handovers.findById(s.handoverId()).orElseThrow(ApiException::notFound);
         String text = "From " + me.displayName() + " (" + s.roleLabel() + "): " + q;
         UUID id = jdbc.sql("""

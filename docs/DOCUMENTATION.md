@@ -251,7 +251,7 @@ server-sent events (`/api/jobs/{id}/events`).
 **Errors** always look like `{"error": "CODE", "message": "…", "details": …}`. Codes: `VALIDATION_FAILED`,
 `ATTESTATION_REQUIRED` (400) · `UNAUTHENTICATED` (401) · `PLAN_LIMIT` (402) · `FORBIDDEN_ROLE`, `SHARE_INACTIVE`
 (403) · `NOT_FOUND` (404 — also used for things you may not see, so their existence is never revealed) ·
-`CLAIM_STALE`, `APPROVAL_BLOCKED`, `INVALID_TRANSITION`, `RUN_IN_PROGRESS`, `WORKSPACE_TAKEN`, `ALREADY_EXISTS`,
+`PASSWORD_CHANGE_REQUIRED` (403) · `CLAIM_STALE`, `APPROVAL_BLOCKED`, `INVALID_TRANSITION`, `RUN_IN_PROGRESS`, `WORKSPACE_TAKEN`, `ALREADY_EXISTS`,
 `NOT_ALLOWED` (409) · `FILE_TOO_LARGE` (413) · `UNSUPPORTED_TYPE` (415) · `DATABASE_UNREACHABLE`,
 `DATABASE_UNSUITABLE` (422) · `TOO_MANY_REQUESTS` (429, with `Retry-After`) · `INTERNAL_ERROR` (500, with a
 reference number) · `LLM_UNAVAILABLE` (503).
@@ -290,7 +290,15 @@ its database. All data stays in the company's database.
 
 ## 8. Security and privacy
 
-- **Passwords**: BCrypt hashes in the company's database; at least 12 characters; temporary passwords must be changed.
+- **Role-based access is enforced by the API, not the web app.** Every endpoint checks the caller on the server;
+  the web app's route guards only decide what to show. Role, clearance, groups and active status are read from the
+  database on every request (never trusted from the token), so demotion, removal from a project or deactivation
+  applies to tokens already issued. Another project's or company's ids return 404. A forged or edited token is
+  rejected (401). `RbacMatrixTest` calls every endpoint as an admin, lead, leaver, member, recipient, outsider,
+  another company's admin, a forged token and no token, and fails on any request that is not refused.
+- **Passwords**: BCrypt hashes in the company's database; at least 12 characters. A temporary password opens only
+  the caller's profile and the password change until it is changed (enforced by the API, error
+  `PASSWORD_CHANGE_REQUIRED`).
 - **Sessions**: signed JWTs carrying the user and workspace; "Keep me signed in" decides between local and session
   storage in the browser.
 - **Rate limits**: sign-in 30 attempts per address per 10 minutes and 8 wrong passwords per account per 15 minutes;
@@ -685,7 +693,7 @@ decides each person's role. The Figma plugin that draws the product design (file
 ## 19. Testing
 
 ```bash
-./mvnw test          # 84 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
+./mvnw test          # 89 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
 cd frontend && npx tsc -b --noEmit && npm run build
 ```
 
@@ -693,7 +701,7 @@ cd frontend && npx tsc -b --noEmit && npm run build
 |---|---|
 | Evidence | `QuoteMatcherTest`, `ClaimScorerTest` |
 | Ingest | `RedactorTest`, `ChunkerTest`, `ConnectorTest`, `SourceIngestApiTest` |
-| Identity and access | `IdentityApiTest`, `AccessPolicyTest`, `PasswordResetApiTest` |
+| Identity and access | `IdentityApiTest`, `AccessPolicyTest`, `PasswordResetApiTest`, `RbacMatrixTest` (every endpoint × every role) |
 | Reconstruction and review | `OfflineExtractorTest`, `ReconstructApiTest`, `ReviewApiTest` |
 | Workspaces and admin | `WorkspaceApiTest`, `DatabaseUrlTest`, `CompanyAdminApiTest`, `HardeningApiTest`, `SafeLogTest` |
 | Handover lifecycle | `HandoverStateMachineTest`, `LifecycleApiTest`, `HandoverFeaturesApiTest` |

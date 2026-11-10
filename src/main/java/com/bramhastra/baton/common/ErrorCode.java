@@ -12,6 +12,8 @@ public enum ErrorCode {
     /** The workspace's plan does not allow adding more of something. */
     PLAN_LIMIT(HttpStatus.PAYMENT_REQUIRED),
     FORBIDDEN_ROLE(HttpStatus.FORBIDDEN),
+    /** Signed in with a temporary password: only reading your profile and changing the password are allowed. */
+    PASSWORD_CHANGE_REQUIRED(HttpStatus.FORBIDDEN),
     SHARE_INACTIVE(HttpStatus.FORBIDDEN),
     /** Missing OR not visible. Never reveal that a hidden resource exists. */
     NOT_FOUND(HttpStatus.NOT_FOUND),

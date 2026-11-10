@@ -168,8 +168,15 @@ class CompanyAdminApiTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].role").value("PROJECT_LEAD"));
         send(get("/api/projects/" + project), admin, null).andExpect(status().isNotFound());
 
-        String ben = login("ben@co.example", JsonPath.read(send(post("/api/admin/users/" + benId + "/reset-password"),
-                admin, null).andReturn().getResponse().getContentAsString(), "$.temporaryPassword"));
+        String benTemp = JsonPath.read(send(post("/api/admin/users/" + benId + "/reset-password"),
+                admin, null).andReturn().getResponse().getContentAsString(), "$.temporaryPassword");
+        String benFirst = login("ben@co.example", benTemp);
+        // A temporary password opens nothing until it is changed.
+        send(get("/api/directory"), benFirst, null).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("PASSWORD_CHANGE_REQUIRED"));
+        send(post("/api/me/password"), benFirst, Map.of("currentPassword", benTemp, "newPassword", "ben-own-password-2"))
+                .andExpect(status().isNoContent());
+        String ben = login("ben@co.example", "ben-own-password-2");
         // The lead builds the team and can see the directory to do it.
         send(get("/api/directory"), ben, null).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(3));
         send(post("/api/projects/" + project + "/members"), ben, Map.of("userId", caraId, "role", "MEMBER"))

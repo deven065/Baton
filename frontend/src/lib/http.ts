@@ -37,6 +37,10 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
   if (!res.ok) {
     let err: { error?: string; message?: string; details?: unknown } = {};
     try { err = await res.json(); } catch { /* not JSON */ }
+    // The server refuses everything but the password change while a temporary password is in use.
+    if (err.error === 'PASSWORD_CHANGE_REQUIRED' && window.location.pathname !== '/change-password') {
+      window.location.assign('/change-password');
+    }
     throw new ApiError(res.status, err.error ?? `HTTP_${res.status}`, err.message ?? res.statusText, err.details);
   }
   if (res.status === 204) return undefined as T;
