@@ -80,7 +80,7 @@ To sign up a test company against a local database, start the API with `ALLOW_PR
 ## Tests
 
 ```bash
-./mvnw test                   # 89 tests against a real pgvector container (needs Docker)
+./mvnw test                   # 90 tests against a real pgvector container (needs Docker)
 ```
 
 ## Configuration

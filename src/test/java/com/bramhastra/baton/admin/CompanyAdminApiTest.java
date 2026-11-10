@@ -195,6 +195,24 @@ class CompanyAdminApiTest {
     }
 
     @Test
+    void aDatabaseUserWhoCannotCreateTablesGetsTheFixNotAnError() throws Exception {
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+        String dbName = "limited_" + suffix;
+        String role = "reader_" + suffix;
+        home.sql("CREATE DATABASE " + dbName).update();
+        home.sql("CREATE ROLE " + role + " LOGIN PASSWORD 'reader-password'").update();
+        URI u = URI.create(db.getJdbcUrl().substring(5));
+        send(post("/api/workspaces"), null, Map.of(
+                "slug", "ro-" + suffix.substring(0, 8), "name", "Read Only Co",
+                "database", Map.of("url", "postgresql://" + u.getHost() + ":" + u.getPort() + "/" + dbName,
+                        "username", role, "password", "reader-password"),
+                "admin", Map.of("displayName", "Ro Admin", "email", "ro@co.example", "password", ADMIN_PASSWORD)))
+                .andExpect(jsonPath("$.error").value("DATABASE_UNSUITABLE"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString(
+                        "GRANT USAGE, CREATE ON SCHEMA public TO \"" + role + "\"")));
+    }
+
+    @Test
     void unusedGroupsCanBeDeleted() throws Exception {
         String id = JsonPath.read(send(post("/api/admin/groups"), admin, Map.of("name", "design"))
                 .andReturn().getResponse().getContentAsString(), "$.id");
