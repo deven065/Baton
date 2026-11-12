@@ -53,6 +53,23 @@ public class GroqClient implements LlmClient {
         this.breaker = new CircuitBreaker(4, Duration.ofSeconds(60), Clock.systemUTC());
     }
 
+    /**
+     * The provider's own error text ({"error":{"message":…}}), so the admin sees the real reason. It describes
+     * the request (model, key, quota), never company content, which is only in the prompt; capped and one line.
+     */
+    String providerMessage(String body) {
+        try {
+            String m = json.readTree(body).path("error").path("message").asString();
+            if (m == null || m.isBlank()) {
+                return null;
+            }
+            m = m.replaceAll("\\s+", " ").strip();
+            return m.length() > 200 ? m.substring(0, 200) + "…" : m;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
     @Override
     public LlmResponse complete(LlmRequest req) {
         String key = LlmCache.key(req);
@@ -92,8 +109,11 @@ public class GroqClient implements LlmClient {
                     continue;
                 }
                 breaker.recordFailure();
-                throw new LlmClientError("The AI provider (" + label + ") refused the request: HTTP " + r.status()
-                        + (r.status() == 401 || r.status() == 403 ? " (check the API key)" : r.status() == 404 ? " (check the model name)" : ""));
+                String hint = r.status() == 401 || r.status() == 403 ? " (check the API key)"
+                        : r.status() == 404 ? " (check the model name, and that this key's account may use it)" : "";
+                String said = providerMessage(r.body());
+                throw new LlmClientError("The AI provider (" + label + ") refused the request: HTTP " + r.status() + hint
+                        + (said == null ? "" : ". It said: " + said));
             }
             breaker.recordFailure();
             throw new LlmUnavailableException("Waiting for AI capacity; " + label + " kept returning errors");

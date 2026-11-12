@@ -73,6 +73,9 @@ class AiSettingsApiTest {
             if (!"Bearer company-key-12345678".equals(ex.getRequestHeaders().getFirst("Authorization"))) {
                 code = 401;
                 reply = "{\"error\":\"bad key\"}";
+            } else if (body.contains("\"missing-model\"")) {
+                code = 404;
+                reply = "{\"error\":{\"message\":\"The model `missing-model` does not exist or you do not have access to it.\",\"code\":\"model_not_found\"}}";
             } else {
                 String content = body.contains("connectivity check") ? "OK" : "{\\\"claims\\\": []}";
                 reply = "{\"choices\":[{\"message\":{\"content\":\"" + content + "\"}}],"
@@ -117,6 +120,10 @@ class AiSettingsApiTest {
                 "apiKey", "wrong-key-0000")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(false))
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("check the API key")));
+        // A model the key cannot use: the provider's own reason is shown, not just the status code.
+        send(post("/api/admin/ai/test"), admin, Map.of("provider", "CUSTOM", "baseUrl", url(), "model", "missing-model",
+                "apiKey", "company-key-12345678")).andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("does not exist or you do not have access")));
         send(post("/api/admin/ai/test"), admin, Map.of("provider", "CUSTOM", "baseUrl", url(), "model", "company-model",
                 "apiKey", "company-key-12345678")).andExpect(jsonPath("$.ok").value(true));
         assertThat(jdbc.sql("SELECT count(*) FROM ai_setting").query(Integer.class).single()).isZero();
