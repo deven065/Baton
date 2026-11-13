@@ -83,6 +83,8 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  /* Tailwind's own "overline" utility draws a line above the text; this label style must not. */
+  text-decoration-line: none !important;
 }
 
 /* ─────────────────────────── Motion ───────────────────────────

@@ -1,4 +1,4 @@
-import { ArrowRight, Check, ChevronDown, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, ChevronDown, PartyPopper, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -72,52 +72,109 @@ export function useGuide() {
 
 const HIDE_KEY = 'baton.guideCollapsed';
 
-/** The "Your next step" card: one clear action, and the whole path underneath. */
+function readPref(): boolean | null {
+  try { const v = localStorage.getItem(HIDE_KEY); return v === '1' ? true : v === '0' ? false : null; } catch { return null; }
+}
+
+/** The "Your next step" card: one clear action, a progress bar, and the whole path as a stepper underneath. */
 /** {@code here} turns a step's button into an action on the current page (for example opening a form). */
 export function NextStepGuide({ onStart, here = {} }: { onStart?: () => void; here?: Record<string, () => void> }) {
   const { steps, next, loading, allDone } = useGuide();
-  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(HIDE_KEY) === '1'; } catch { return false; } });
+  const [pref, setPref] = useState<boolean | null>(readPref);
   if (loading || steps.length === 0) return null;
-  const toggle = () => setCollapsed(c => { try { localStorage.setItem(HIDE_KEY, c ? '0' : '1'); } catch { /* private mode */ } return !c; });
+  // Until the person chooses, the steps are open while there is work to do and folded away once it is all done.
+  const collapsed = pref ?? allDone;
+  const toggle = () => {
+    const v = !collapsed;
+    setPref(v);
+    try { localStorage.setItem(HIDE_KEY, v ? '1' : '0'); } catch { /* private mode */ }
+  };
   const doneCount = steps.filter(s => s.done).length;
+  const pct = Math.round((doneCount / steps.length) * 100);
+  const nextIndex = next ? steps.indexOf(next) + 1 : steps.length;
   const onHere = next ? (next.to === 'start' ? onStart : here[next.key]) : undefined;
-  const button = next && (onHere
-    ? <Button kind="primary" onClick={onHere}>{next.action}<ArrowRight className="size-4" aria-hidden /></Button>
-    : <Link to={next.to}><Button kind="primary">{next.action}<ArrowRight className="size-4" aria-hidden /></Button></Link>);
+  const arrow = <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />;
+  const button = allDone
+    ? <Link to="/app/successors" className="group"><Button kind="primary">See successors{arrow}</Button></Link>
+    : onHere
+      ? <span className="group"><Button kind="primary" onClick={onHere}>{next!.action}{arrow}</Button></span>
+      : <Link to={next!.to} className="group"><Button kind="primary">{next!.action}{arrow}</Button></Link>;
 
   return (
-    <Card className="border-brand-100 bg-gradient-to-br from-brand-50/60 to-card p-0">
-      <div className="flex flex-wrap items-center gap-4 p-5">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-600 text-white"><Sparkles className="size-5" aria-hidden /></span>
-        <div className="min-w-[220px] flex-1">
-          <p className="overline text-brand-700">{allDone ? 'All done' : `Your next step · ${doneCount} of ${steps.length} done`}</p>
-          <h2 className="text-h3 font-semibold text-ink-900">{allDone ? 'Your handover is shared' : next!.title}</h2>
-          <p className="text-small text-ink-700">{allDone ? 'Follow how your successors are doing, and start the next version when something changes.' : next!.why}</p>
+    <Card className={cn('relative overflow-hidden p-0', allDone ? 'border-verified/20' : 'border-brand-100')}>
+      {/* A soft wash of colour behind the header; purely decorative. */}
+      <div aria-hidden className={cn('pointer-events-none absolute -top-24 -right-16 size-72 rounded-full blur-3xl',
+        allDone ? 'bg-verified-bg' : 'bg-brand-100/70')} />
+      <div className="relative flex flex-wrap items-center gap-x-5 gap-y-4 p-5 sm:p-6">
+        <span className={cn('hidden size-12 shrink-0 sm:grid place-items-center rounded-2xl text-white shadow-sm',
+          allDone ? 'bg-verified' : 'bg-gradient-to-br from-brand-600 to-brand-700')}>
+          {allDone ? <PartyPopper className="size-6" aria-hidden /> : <Sparkles className="size-6" aria-hidden />}
+        </span>
+        <div className="min-w-[240px] flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={cn('overline', allDone ? 'text-verified' : 'text-brand-700')}>{allDone ? 'All done' : 'Your next step'}</span>
+            <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums',
+              allDone ? 'bg-verified-bg text-verified' : 'bg-brand-50 text-brand-700 ring-1 ring-brand-100')}>
+              {allDone ? `${steps.length} of ${steps.length}` : `Step ${nextIndex} of ${steps.length}`}
+            </span>
+          </div>
+          <h2 className="mt-1 text-h2 font-semibold tracking-tight text-ink-900">{allDone ? 'Your handover is shared' : next!.title}</h2>
+          <p className="mt-0.5 max-w-2xl text-small text-ink-700">
+            {allDone ? 'Follow how your successors are doing, and start the next version when something changes.' : next!.why}
+          </p>
         </div>
-        {allDone ? <Link to="/app/successors"><Button kind="primary">See successors<ArrowRight className="size-4" aria-hidden /></Button></Link> : button}
-        <button type="button" onClick={toggle} aria-expanded={!collapsed} className="flex items-center gap-1 rounded-md px-2 py-1 text-caption text-ink-500 hover:bg-subtle cursor-pointer">
-          {collapsed ? 'Show all steps' : 'Hide steps'}<ChevronDown className={cn('size-3.5 transition-transform', !collapsed && 'rotate-180')} aria-hidden />
-        </button>
+        <div className="flex items-center gap-2">
+          {button}
+          <button type="button" onClick={toggle} aria-expanded={!collapsed}
+            className="flex items-center gap-1 rounded-md px-2 py-1.5 text-caption font-medium text-ink-500 hover:bg-subtle hover:text-ink-700 cursor-pointer">
+            {collapsed ? 'Show steps' : 'Hide steps'}<ChevronDown className={cn('size-3.5 transition-transform', !collapsed && 'rotate-180')} aria-hidden />
+          </button>
+        </div>
       </div>
-      {!collapsed && (
-        <ol className="grid gap-px border-t border-brand-100 bg-brand-100/60 sm:grid-cols-2 xl:grid-cols-4" aria-label="Steps">
+
+      <div className="relative px-5 sm:px-6" role="progressbar" aria-label="Handover progress"
+        aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={doneCount}>
+        <div className="h-1.5 overflow-hidden rounded-full bg-ink-900/5">
+          <div className={cn('h-full rounded-full transition-[width] duration-700 ease-out',
+            allDone ? 'bg-verified' : 'bg-gradient-to-r from-brand-600 to-brand-700')} style={{ width: `${Math.max(pct, 3)}%` }} />
+        </div>
+        <p className="mt-1.5 text-caption text-ink-500 tabular-nums">{doneCount} of {steps.length} steps done</p>
+      </div>
+
+      {collapsed ? <div className="h-4" /> : (
+        <ol className="relative flex flex-col gap-1 px-5 pt-3 pb-5 sm:px-6 lg:flex-row lg:gap-0 lg:pt-5" aria-label="Steps">
           {steps.map((s, i) => {
             const isNext = next?.key === s.key;
-            const label = (
-              <span className="flex items-start gap-2.5 px-4 py-3">
-                <span className={cn('mt-0.5 grid size-5 shrink-0 place-items-center rounded-full text-[11px] font-semibold',
-                  s.done ? 'bg-verified text-white' : isNext ? 'bg-brand-600 text-white' : 'border border-line-strong bg-card text-ink-500')}>
-                  {s.done ? <Check className="size-3" strokeWidth={3} aria-hidden /> : i + 1}
+            const last = i === steps.length - 1;
+            const body = (
+              <>
+                <span className={cn('relative z-10 grid size-7 shrink-0 place-items-center rounded-full text-caption font-semibold',
+                  s.done ? 'bg-verified text-white'
+                    : isNext ? 'bg-brand-600 text-white ring-4 ring-brand-100'
+                      : 'border border-line-strong bg-card text-ink-500')}>
+                  {s.done ? <Check className="size-3.5" strokeWidth={3} aria-hidden /> : i + 1}
                 </span>
-                <span className={cn('text-small', s.done ? 'text-ink-500 line-through decoration-ink-300' : isNext ? 'font-medium text-ink-900' : 'text-ink-700')}>
+                <span className={cn('text-small leading-snug lg:text-caption',
+                  s.done ? 'text-ink-500' : isNext ? 'font-semibold text-brand-700' : 'text-ink-700')}>
                   {s.title}<span className="sr-only">{s.done ? ' (done)' : isNext ? ' (next)' : ''}</span>
                 </span>
-              </span>
+              </>
             );
+            const cls = 'relative flex w-full items-center gap-3 rounded-lg p-1.5 text-left hover:bg-canvas lg:flex-col lg:gap-2 lg:px-1 lg:text-center cursor-pointer';
             return (
-              <li key={s.key} className={cn('bg-card', isNext && 'bg-brand-50')} aria-current={isNext ? 'step' : undefined}>
-                {s.to === 'start' ? <button type="button" onClick={onStart} className="w-full text-left hover:bg-canvas cursor-pointer">{label}</button>
-                  : <Link to={s.to} className="block hover:bg-canvas">{label}</Link>}
+              <li key={s.key} className="relative flex-1" aria-current={isNext ? 'step' : undefined}>
+                {!last && (
+                  <>
+                    {/* The line to the next step: across on wide screens, down on narrow ones; green once this step is done. */}
+                    <span aria-hidden className={cn('absolute hidden h-0.5 lg:block top-[19px] left-[calc(50%+18px)] right-[calc(-50%+18px)]',
+                      s.done ? 'bg-verified' : 'bg-line')} />
+                    <span aria-hidden className={cn('absolute w-0.5 lg:hidden left-[19px] top-[36px] -bottom-[6px]',
+                      s.done ? 'bg-verified' : 'bg-line')} />
+                  </>
+                )}
+                {s.to === 'start'
+                  ? <button type="button" onClick={onStart} className={cls}>{body}</button>
+                  : <Link to={s.to} className={cls}>{body}</Link>}
               </li>
             );
           })}
@@ -127,16 +184,26 @@ export function NextStepGuide({ onStart, here = {} }: { onStart?: () => void; he
   );
 }
 
-/** A small "Next: …" link for the sidebar, so the next step is one click away from any page. */
+/** A small "Next step" card for the sidebar, so the next step is one click away from any page. */
 export function NextStepLink({ onNavigate }: { onNavigate?: () => void }) {
-  const { next, loading } = useGuide();
+  const { steps, next, loading } = useGuide();
   if (loading || !next) return null;
   const to = next.to === 'start' ? '/app?start=1' : next.to;
+  const done = steps.filter(s => s.done).length;
   return (
-    <Link to={to} onClick={onNavigate} className="mx-0.5 mt-2 flex items-center gap-2 rounded-lg border border-brand-100 bg-brand-50 px-2.5 py-2 text-small text-brand-700 hover:bg-brand-100">
-      <Sparkles className="size-3.5 shrink-0" aria-hidden />
-      <span className="min-w-0 flex-1 truncate"><span className="font-medium">Next:</span> {next.title}</span>
-      <ArrowRight className="size-3.5 shrink-0" aria-hidden />
+    <Link to={to} onClick={onNavigate}
+      className="group mx-0.5 mt-2 flex flex-col gap-1.5 rounded-xl border border-brand-100 bg-gradient-to-br from-brand-50 to-card px-3 py-2.5 hover:border-brand-600/40 hover:shadow-sm">
+      <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-brand-700">
+        <Sparkles className="size-3 shrink-0" aria-hidden />Next step
+        <span className="ml-auto tabular-nums normal-case tracking-normal text-brand-700/70">{done}/{steps.length}</span>
+      </span>
+      <span className="flex items-center gap-2 text-small font-medium text-ink-900">
+        <span className="min-w-0 flex-1 truncate">{next.title}</span>
+        <ArrowRight className="size-3.5 shrink-0 text-brand-700 transition-transform group-hover:translate-x-0.5" aria-hidden />
+      </span>
+      <span className="h-1 overflow-hidden rounded-full bg-brand-100" aria-hidden>
+        <span className="block h-full rounded-full bg-brand-600" style={{ width: `${Math.max((done / steps.length) * 100, 4)}%` }} />
+      </span>
     </Link>
   );
 }
