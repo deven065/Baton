@@ -157,6 +157,10 @@ source to members of those groups.
 - **Notifications bell**: exit answers and recipients opening or acknowledging the handover.
 - **Forgot password**: email link (when email is on), otherwise instructions to ask an admin.
 - **Keep me signed in**: when unticked, the session ends when the tab closes.
+- **Your next step guide**: the dashboard (and the People and Projects pages for admins) shows the whole path from an
+  empty workspace to a shared handover as a checklist ticked from real data (team, project, sources, handover,
+  reconstruction, review, approval, sharing), with one button for the next step. The sidebar shows the same next step on
+  every page.
 - **Handover switcher**: leads see the current handover at the top of the sidebar; click it to switch to another
   handover in the project (remembered in this browser) or to **rename** it (recorded as `HANDOVER_RENAMED`).
 - **Account menu**: the avatar at the top right shows who you are and opens **Account settings** (profile,

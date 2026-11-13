@@ -230,7 +230,7 @@ export const qa = {
   directory: ['directory'] as const,
 };
 
-export const useAdminUsers = () => useQuery({ queryKey: qa.users, queryFn: () => api<AdminUserDto[]>('/api/admin/users') });
+export const useAdminUsers = (opts: { enabled?: boolean } = {}) => useQuery({ queryKey: qa.users, queryFn: () => api<AdminUserDto[]>('/api/admin/users'), enabled: opts.enabled ?? true });
 export const useGroups = () => useQuery({ queryKey: qa.groups, queryFn: () => api<GroupDto[]>('/api/admin/groups') });
 export interface AuditFilter { actions: string[]; actor: string; from: string; to: string; q: string }
 export interface AuditActionCountDto { action: string; count: number }
@@ -252,7 +252,7 @@ export const useAudit = (f: AuditFilter) => useInfiniteQuery({
   getNextPageParam: last => (last.length === 100 ? last[last.length - 1].id : undefined),
 });
 export const useAuditActions = () => useQuery({ queryKey: qa.auditActions, queryFn: () => api<AuditActionCountDto[]>('/api/admin/audit/actions') });
-export const useAdminProjects = () => useQuery({ queryKey: qa.projects, queryFn: () => api<AdminProjectDto[]>('/api/admin/projects') });
+export const useAdminProjects = (opts: { enabled?: boolean } = {}) => useQuery({ queryKey: qa.projects, queryFn: () => api<AdminProjectDto[]>('/api/admin/projects'), enabled: opts.enabled ?? true });
 export const useTeam = (projectId?: string | null) => useQuery({ queryKey: qa.team(projectId ?? ''), queryFn: () => api<TeamMemberDto[]>(`/api/projects/${projectId}/team`), enabled: !!projectId });
 export const useDirectory = (enabled = true) => useQuery({ queryKey: qa.directory, queryFn: () => api<PersonDto[]>('/api/directory'), enabled });
 

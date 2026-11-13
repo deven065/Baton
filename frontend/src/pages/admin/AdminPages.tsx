@@ -11,6 +11,7 @@ import {
 } from '@/data/live';
 import { useSearchParams } from 'react-router-dom';
 import { useSession } from '@/lib/auth';
+import { NextStepGuide } from '@/components/layout/guide';
 import { ApiError } from '@/lib/http';
 import { cn } from '@/lib/utils';
 
@@ -184,6 +185,8 @@ function GroupsTab() {
 
 export function UsersGroups() {
   const [tab, setTab] = useState<'People' | 'Groups'>('People');
+  // Admins who also lead a project see the guide on their dashboard instead.
+  const pureAdmin = useSession().user.appRole === 'admin';
   const { data: users = [], isLoading, error } = useAdminUsers();
   const { data: groups = [] } = useGroups();
   const [adding, setAdding] = useState(false);
@@ -194,6 +197,7 @@ export function UsersGroups() {
   return (
     <>
       <PageHeader title="People & groups" sub="Clearance and groups decide what each person can see. Every change is recorded in the audit log." right={tab === 'People' && <Button kind="primary" onClick={() => setAdding(true)}><UserPlus className="size-4" aria-hidden />Add person</Button>} />
+      {pureAdmin && <NextStepGuide here={{ people: () => setAdding(true) }} />}
       <div role="tablist" className="flex gap-1 border-b border-line">
         {([['People', users.length], ['Groups', groups.length]] as const).map(([t, n]) => (
           <button key={t} role="tab" type="button" aria-selected={tab === t} onClick={() => setTab(t)} className={cn('-mb-px border-b-2 px-3 py-2.5 text-small font-medium cursor-pointer', tab === t ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-900')}>
@@ -294,6 +298,7 @@ export function ProjectsPage() {
   return (
     <>
       <PageHeader title="Projects" sub="Each project has a lead and a team. Handovers happen inside a project." right={<Button kind="primary" onClick={() => setCreating(true)}><Plus className="size-4" aria-hidden />New project</Button>} />
+      {useSession().user.appRole === 'admin' && <NextStepGuide here={{ project: () => setCreating(true) }} />}
       <QueryState loading={isLoading} error={error} empty={!isLoading && projects.length === 0} emptyText="No projects yet. Create one and choose its lead." />
       {projects.length > 0 && (
         <Table label="Projects" columns={[{ label: 'Project' }, { label: 'Leads' }, { label: 'Team' }, { label: 'Handovers' }, { label: 'Created' }]}>

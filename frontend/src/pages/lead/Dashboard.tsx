@@ -1,6 +1,7 @@
 import { AlertTriangle, Info, KeyRound, MessageCircle, Plug, type LucideIcon } from 'lucide-react';
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { NextStepGuide } from '@/components/layout/guide';
 import { StartHandoverModal } from './StartHandover';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,11 @@ const initials = (n: string) => n.split(/\s+/).map(w => w[0]).join('').slice(0, 
 export default function Dashboard() {
   const { user, project, handover } = useSession();
   const [starting, setStarting] = useState(false);
+  // The sidebar's "Next: Start a handover" link lands here with ?start=1.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (params.get('start') === '1') { setStarting(true); params.delete('start'); setParams(params, { replace: true }); }
+  }, [params, setParams]);
   const handovers = useHandoverList(project?.id);
   const { data: summary } = useSummary(handover?.id);
   const { data: gaps = [] } = useGapList(handover?.id);
@@ -50,6 +56,7 @@ export default function Dashboard() {
         right={<><Link to="/app/sources"><Button>Add a source</Button></Link><Button kind="primary" onClick={() => setStarting(true)}>Start a handover</Button></>}
       />
       {starting && <StartHandoverModal onClose={() => setStarting(false)} />}
+      <NextStepGuide onStart={() => setStarting(true)} />
       <div className="reveal-list grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Claims" value={String(summary?.total ?? '–')} note={summary ? `${summary.byStatus.VERIFIED ?? 0} verified · ${summary.byStatus.SINGLE_SOURCE ?? 0} single source` : 'No handover yet'} />
         <StatCard label="Claims to review" value={String(summary ? toReview : '–')} note={`${inferred} inferred · ${missing} missing evidence`} />

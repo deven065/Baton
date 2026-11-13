@@ -9,6 +9,7 @@ import { SensitivityChip } from '@/components/ui/badge';
 import { fmtDate, fmtDateTime, useGapList, useHandoverList, useRenameHandover, useShares, useSummary } from '@/data/live';
 import { useCurrentShare } from '@/pages/recipient/RecipientPages';
 import { Avatar, Kbd, Logo } from '@/components/ui/misc';
+import { NextStepLink } from '@/components/layout/guide';
 import { chooseHandover, useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 
@@ -182,6 +183,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </span>
         <ChevronDown className="size-3.5 text-ink-400" aria-hidden />
       </button>
+      <NextStepLink onNavigate={onNavigate} />
       <nav aria-label="Main" className="stagger-side flex flex-col gap-1">
         {!isAdmin && (
           <>
