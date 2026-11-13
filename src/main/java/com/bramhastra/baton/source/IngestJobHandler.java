@@ -119,7 +119,9 @@ public class IngestJobHandler implements JobHandler {
                     + " documents", Map.of("documents", i + 1, "chunks", chunks, "redactions", redactions)));
         }
 
-        if (file != null) {
+        // A recording's audio stays (encrypted with the workspace key) so a claim can play the moment it cites.
+        if (file != null && !(source.type() == SourceType.MEETING_RECORDING
+                && com.bramhastra.baton.source.connector.RecordingConnector.isAudio(file))) {
             sources.deleteStaged(source.id());
         }
         sources.markReady(source.id(), docs.size(), chunks, redactions);

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/form';
 import { Banner, Card, EvidenceQuote, Kbd, QueryState } from '@/components/ui/misc';
 import {
-  CLAIM_TYPE_LABEL, STATUS, evidenceLabel, fmtDateTime, sens, typeLabel, useClaim, useClaimList, usePatchClaim, useRevisions,
+  CLAIM_TYPE_LABEL, STATUS, evidenceLabel, playOf, fmtDateTime, sens, typeLabel, useClaim, useClaimList, usePatchClaim, useRevisions,
   type ClaimDto, type ClaimStatusDto, type ReviewStateDto,
 } from '@/data/live';
 import { useSession } from '@/lib/auth';
@@ -195,7 +195,7 @@ export default function Review() {
               {!detail.isLoading && selected.evidence.length === 0 && (
                 <Banner tone="inferred" icon={Layers}>No verified quote. Recipients see this only as “Likely, not confirmed”, and only if you accept it.</Banner>
               )}
-              {selected.evidence.map(e => <EvidenceQuote key={e.id} source={evidenceLabel(e)} quote={`“${e.quote}”`} matched={e.matchScore >= 0.999} />)}
+              {selected.evidence.map(e => <EvidenceQuote key={e.id} source={evidenceLabel(e)} quote={`“${e.quote}”`} matched={e.matchScore >= 0.999} play={playOf(e)} />)}
               {selected.unverifiedCitations > 0 && <p className="text-caption text-ink-500">{selected.unverifiedCitations} citation{selected.unverifiedCitations > 1 ? 's' : ''} hidden: you can’t see that source.</p>}
               <Banner icon={Lock}>Sensitivity inherited: {sens(selected.sensitivity)} — the highest level of its evidence. An edit cannot lower it.</Banner>
               {err && <Banner tone="conflict" icon={AlertTriangle}>{err.code === 'CLAIM_STALE' ? 'Someone else changed this claim. It has been reloaded — try again.' : err.message}</Banner>}

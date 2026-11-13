@@ -94,7 +94,9 @@ public class OfflineExtractor {
             }
             Matcher d = ATTR_DATE.matcher(attrs);
             String chunkDate = d.find() ? d.group(1) : null;
-            for (String line : body.split("\n")) {
+            for (String raw : body.split("\n")) {
+                // Meeting transcripts: drop the "[00:12:34] Speaker: " prefix; the quote finds its moment anyway.
+                String line = TRANSCRIPT_PREFIX.matcher(raw.strip()).replaceFirst("");
                 for (String sentence : sentences(line.strip())) {
                     Map<String, Object> claim = classify(chunkId, chunkDate, sentence);
                     if (claim != null) {
@@ -186,6 +188,8 @@ public class OfflineExtractor {
         }
         return text.length() > 80 ? text.substring(0, 80) : text;
     }
+
+    static final Pattern TRANSCRIPT_PREFIX = Pattern.compile("^\\[\\d{1,2}:\\d{2}:\\d{2}]\\s*(?:[^:\\n]{1,40}:\\s+)?");
 
     /** Splits a line into sentences, keeping each as an exact substring of the line. */
     static List<String> sentences(String line) {

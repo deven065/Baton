@@ -372,6 +372,7 @@ Baton works without any AI. AI only proposes claims; code does the rest.
 |---|---|---|
 | `CHAT_EXPORT` | Upload a chat export; the format is recognised from the file: **Slack** (export `.zip` or a channel `.json`), **WhatsApp** ("Export chat" `.txt`, or the `.zip` with media; Android and iPhone formats, day- or month-first dates), **Discord** (DiscordChatExporter `.json` or `.csv`, or a `.zip` of them) | Messages, authors, times; one document per channel per day |
 | `MEETING_NOTES` | Upload `.md`, `.txt`, `.pdf`, `.docx` | The notes |
+| `MEETING_RECORDING` | Upload the **audio** (`.mp3`, `.m4a`, `.wav`, `.webm`, `.ogg`, `.flac`, `.mp4`) or the **transcript** Zoom, Teams or Meet exports (`.vtt`, `.srt`), plus the meeting date | A timestamped transcript, one `[hh:mm:ss] Speaker: text` line per turn (see below) |
 | `DOCUMENT` | Upload `.md`, `.txt`, `.pdf`, `.docx` | The document |
 | `TASK_CSV` | Upload a Jira, Trello or GitHub Projects CSV export | Tasks, owners, states |
 | `GITHUB` (live) | `owner/name` and optional branch | README, Markdown docs (40), issues and pull requests with comments (200), recent commits |
@@ -379,8 +380,25 @@ Baton works without any AI. AI only proposes claims; code does the rest.
 | `GOOGLE_DRIVE` (live) | Folder link or id | Google Docs and text files (up to 50, 1 MB each) |
 | `TESTIMONY` | Created by exit-interview answers | Answers |
 
-Uploads are limited to 25 MB, kept encrypted only until the ingest job finishes, then deleted. Live sources can be
-synced again from the Sources page.
+Uploads are limited to 25 MB, kept encrypted only until the ingest job finishes, then deleted (except a recording's
+audio, below). Live sources can be synced again from the Sources page.
+
+**Meeting recordings.** Decisions made in calls rarely get written down; a recording makes them evidence.
+
+- **Audio** is transcribed with Whisper through the workspace's own AI provider (Groq `whisper-large-v3-turbo` or
+  OpenAI `whisper-1`; OpenRouter has no audio API), or the server's Groq key. Without a provider, Baton refuses the
+  upload and suggests the transcript file instead. The audio necessarily goes to the provider before redaction, so
+  only upload recordings you may share with it; the transcript is redacted like any other source.
+- **Speakers.** Whisper does not tell voices apart, so the model marks speaker turns, naming a person only when the
+  conversation shows who it is (an introduction, being addressed by name); otherwise "Speaker A". The transcript
+  says the names are suggestions. Transcript files keep the speaker names Zoom, Teams or Meet wrote.
+- **Timestamps.** Each stored line starts with `[hh:mm:ss]`. When a claim cites a recording, the API returns the
+  second the quoted words were said (`atSeconds` on the evidence), and the Review and Conflicts pages show a
+  **▶ 0:50** button that plays the recording from that moment.
+- **The audio is kept**, encrypted with the workspace key, so it can be played. Anyone who may see the source may
+  play it (each play is audited as `RECORDING_PLAYED`); the lead can **delete the audio** at any time and keep the
+  transcript and every quote (`RECORDING_DELETED`).
+- A demo call (72 seconds, two voices) and its transcript are in `demo/recordings/`.
 
 **Connecting tools** (Organisation → Connections, admins only; credentials encrypted in the company's database):
 
@@ -713,7 +731,7 @@ decides each person's role. The Figma plugin that draws the product design (file
 ## 19. Testing
 
 ```bash
-./mvnw test          # 110 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
+./mvnw test          # 115 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
 cd frontend && npx tsc -b --noEmit && npm run build
 ```
 
@@ -761,7 +779,7 @@ dashboard", "renewal is due on 2026-12-01"); a model is expected to find them.
 | Area | Tests |
 |---|---|
 | Evidence | `QuoteMatcherTest`, `ClaimScorerTest` |
-| Ingest | `RedactorTest`, `ChunkerTest`, `ConnectorTest`, `SourceIngestApiTest` |
+| Ingest | `RedactorTest`, `ChunkerTest`, `ConnectorTest`, `SourceIngestApiTest`, `TranscriptTest`, `RecordingApiTest` (fake Whisper and chat model: transcription, speakers, playback, delete audio, timestamps on evidence) |
 | Identity and access | `IdentityApiTest`, `AccessPolicyTest`, `PasswordResetApiTest`, `RbacMatrixTest` (every endpoint × every role) |
 | Reconstruction and review | `OfflineExtractorTest`, `ReconstructApiTest`, `ReviewApiTest`, `ConflictDecisionTest` (a conflict decision survives re-runs) |
 | Workspaces and admin | `WorkspaceApiTest`, `DatabaseUrlTest`, `CompanyAdminApiTest`, `HardeningApiTest`, `SafeLogTest` |

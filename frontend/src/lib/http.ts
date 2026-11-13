@@ -80,6 +80,19 @@ export async function streamEvents(path: string, onEvent: (event: string, data: 
   }
 }
 
+/** Fetches a file from the API with the session token and returns it as a blob (for audio playback). */
+export async function fetchBlob(path: string): Promise<Blob> {
+  const headers = new Headers();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const res = await fetch(BASE + path, { headers });
+  if (!res.ok) {
+    let err: { error?: string; message?: string } = {};
+    try { err = await res.json(); } catch { /* not JSON */ }
+    throw new ApiError(res.status, err.error ?? `HTTP_${res.status}`, err.message ?? res.statusText);
+  }
+  return res.blob();
+}
+
 /** Downloads a file from the API with the session token (for exports). */
 export async function download(path: string, fallbackName: string) {
   const headers = new Headers();

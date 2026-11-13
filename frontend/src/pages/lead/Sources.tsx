@@ -1,18 +1,19 @@
-import { FolderOpen, MessagesSquare, AlertTriangle, FileText, GitBranch, Hash, KanbanSquare, MessageSquareQuote, NotebookPen, RefreshCw, ShieldCheck, Upload, X, type LucideIcon } from 'lucide-react';
+import { AudioLines, Play, Trash2, FolderOpen, MessagesSquare, AlertTriangle, FileText, GitBranch, Hash, KanbanSquare, MessageSquareQuote, NotebookPen, RefreshCw, ShieldCheck, Upload, X, type LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Chip, SensitivityChip, StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Field, Input, Segmented } from '@/components/ui/form';
 import { Banner, Card, CardHeader, IconTile, PageHeader, Progress, QueryState, WorkflowStepper } from '@/components/ui/misc';
-import { SOURCE_TYPE_LABEL, fmtDateTime, sens, useCreateSource, useSourceList, useSyncSource, type SensitivityDto, type SourceDto, type SourceTypeDto, useIntegrations, type IntegrationKind,
+import { playMoment } from '@/components/ui/recording';
+import { SOURCE_TYPE_LABEL, fmtDateTime, sens, useCreateSource, useDeleteRecording, useSourceList, useSyncSource, type SensitivityDto, type SourceDto, type SourceTypeDto, useIntegrations, type IntegrationKind,
 } from '@/data/live';
 import type { Status } from '@/data/types';
 import { useSession } from '@/lib/auth';
 import { ApiError } from '@/lib/http';
 
 const KIND_ICON: Record<SourceTypeDto, LucideIcon> = {
-  GITHUB: GitBranch, SLACK: MessagesSquare, GOOGLE_DRIVE: FolderOpen, TASK_CSV: KanbanSquare, DOCUMENT: FileText, MEETING_NOTES: NotebookPen, CHAT_EXPORT: Hash, TESTIMONY: MessageSquareQuote,
+  GITHUB: GitBranch, SLACK: MessagesSquare, GOOGLE_DRIVE: FolderOpen, TASK_CSV: KanbanSquare, DOCUMENT: FileText, MEETING_NOTES: NotebookPen, MEETING_RECORDING: AudioLines, CHAT_EXPORT: Hash, TESTIMONY: MessageSquareQuote,
 };
 const STATE: Record<SourceDto['status'], { s: Status; l: string }> = {
   PENDING: { s: 'stale', l: 'Queued' }, SYNCING: { s: 'single', l: 'Syncing…' }, READY: { s: 'verified', l: 'Ready' }, FAILED: { s: 'conflicting', l: 'Failed' },
@@ -39,6 +40,7 @@ function SourceRow({ s, onSync, syncing }: { s: SourceDto; onSync?: () => void; 
           <StatusBadge status={st.s} label={st.l} />
           <span className="text-caption text-ink-500">{s.redactionCount} redacted{s.lastSyncedAt ? ` · ${fmtDateTime(s.lastSyncedAt)}` : ''}</span>
         </div>
+        {s.type === 'MEETING_RECORDING' && <RecordingActions s={s} />}
         {(s.type === 'GITHUB' || s.type === 'SLACK' || s.type === 'GOOGLE_DRIVE') && onSync && (
           <button type="button" aria-label={`Re-sync ${s.title}`} disabled={syncing} onClick={onSync} className="rounded p-1 text-ink-400 hover:text-ink-900 cursor-pointer disabled:opacity-40"><RefreshCw className="size-[18px]" /></button>
         )}
@@ -51,6 +53,27 @@ function SourceRow({ s, onSync, syncing }: { s: SourceDto; onSync?: () => void; 
         {s.aclGroups.length ? s.aclGroups.map(g => <Chip key={g}>{g}</Chip>) : <span className="text-caption text-ink-500">everyone in the project</span>}
       </div>
     </Card>
+  );
+}
+
+const AUDIO = /\.(mp3|m4a|wav|webm|ogg|oga|flac|mp4|mpeg|mpga)$/i;
+
+/** Play a recording from the start, or (lead) delete the audio and keep the transcript. */
+function RecordingActions({ s }: { s: SourceDto }) {
+  const { project, user } = useSession();
+  const remove = useDeleteRecording(project?.id);
+  const hasAudio = s.status === 'READY' && typeof s.config.filename === 'string' && AUDIO.test(s.config.filename) && !s.config.audioDeleted;
+  if (!hasAudio) return null;
+  return (
+    <div className="flex items-center gap-1">
+      <button type="button" onClick={() => playMoment(s.id, 0, s.title)} aria-label={`Play ${s.title}`}
+        className="rounded p-1 text-ink-400 hover:text-brand-700 cursor-pointer"><Play className="size-[18px]" /></button>
+      {user.appRole === 'lead' && (
+        <button type="button" disabled={remove.isPending} aria-label={`Delete the audio of ${s.title}`} title="Delete the audio and keep the transcript"
+          onClick={() => { if (confirm('Delete the audio? The transcript and every quote stay, but claims can no longer play the moment.')) remove.mutate(s.id); }}
+          className="rounded p-1 text-ink-400 hover:text-conflict cursor-pointer disabled:opacity-40"><Trash2 className="size-[18px]" /></button>
+      )}
+    </div>
   );
 }
 
@@ -109,6 +132,7 @@ export default function Sources() {
 
 const TYPES: { id: SourceTypeDto; label: string; accept?: string }[] = [
   { id: 'CHAT_EXPORT', label: 'Chat export (Slack, WhatsApp, Discord)', accept: '.json,.zip,.txt,.csv' },
+  { id: 'MEETING_RECORDING', label: 'Meeting recording (audio or transcript)', accept: 'audio/*,.mp3,.m4a,.wav,.webm,.ogg,.flac,.mp4,.vtt,.srt' },
   { id: 'MEETING_NOTES', label: 'Meeting notes', accept: '.md,.txt,.pdf,.docx' },
   { id: 'DOCUMENT', label: 'Document', accept: '.md,.txt,.pdf,.docx' },
   { id: 'TASK_CSV', label: 'Task board CSV', accept: '.csv' },
@@ -130,6 +154,7 @@ function AddSourceModal({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [repo, setRepo] = useState('');
+  const [meetingDate, setMeetingDate] = useState('');
   const { data: integrations = [] } = useIntegrations();
   const [level, setLevel] = useState<(typeof LEVELS)[number]>('Internal');
   const [groups, setGroups] = useState<string[]>([]);
@@ -158,7 +183,8 @@ function AddSourceModal({ onClose }: { onClose: () => void }) {
     if (!ok) return;
     create.mutate(
       { type, title: title.trim(), sensitivity: level.toUpperCase() as SensitivityDto, aclGroups: groups, file: file ?? undefined, repo: type === 'GITHUB' ? repo.trim() || undefined : undefined,
-        channel: type === 'SLACK' ? repo.trim() : undefined, folder: type === 'GOOGLE_DRIVE' ? repo.trim() : undefined },
+        channel: type === 'SLACK' ? repo.trim() : undefined, folder: type === 'GOOGLE_DRIVE' ? repo.trim() : undefined,
+        meetingDate: type === 'MEETING_RECORDING' && meetingDate ? meetingDate : undefined },
       { onSuccess: onClose },
     );
   };
@@ -197,9 +223,18 @@ function AddSourceModal({ onClose }: { onClose: () => void }) {
                 <Field label={live.field} hint={<p className="text-caption text-ink-500">{live.help}{type === 'GITHUB' && (connected ? ' A token is connected.' : '')}</p>}>{id => <Input id={id} value={repo} onChange={e => setRepo(e.target.value)} placeholder={live.placeholder} disabled={blocked} autoCapitalize="none" spellCheck={false} />}</Field>
               </>
             ) : (
-              <Field label="File" hint={<p className={fieldErrors.file ? 'text-caption text-conflict' : 'text-caption text-ink-500'}>{fieldErrors.file ?? 'Up to 25 MB.'}</p>}>
+              <>
+              <Field label="File" hint={<p className={fieldErrors.file ? 'text-caption text-conflict' : 'text-caption text-ink-500'}>{fieldErrors.file ?? (type === 'MEETING_RECORDING'
+                ? 'Audio up to 25 MB is transcribed by your organisation’s AI provider (Groq or OpenAI), and claims cite the second each thing was said. No AI? Upload the transcript Zoom, Teams or Meet exports (.vtt or .srt).'
+                : 'Up to 25 MB.')}</p>}>
                 {id => <input id={id} type="file" accept={t.accept} onChange={e => { const f = e.target.files?.[0] ?? null; setFile(f); if (f && !title) setTitle(f.name.replace(/\.[^.]+$/, '')); }} className="text-small file:mr-3 file:rounded-lg file:border file:border-line-strong file:bg-card file:px-3 file:py-2 file:text-small file:font-medium" />}
               </Field>
+              {type === 'MEETING_RECORDING' && (
+                <Field label="Meeting date" hint={<p className="text-caption text-ink-500">Used for the timeline and to tell newer decisions from older ones.</p>}>
+                  {id => <Input id={id} type="date" value={meetingDate} onChange={e => setMeetingDate(e.target.value)} />}
+                </Field>
+              )}
+              </>
             )}
             <div className="flex flex-col gap-1.5">
               <span className="text-caption font-medium text-ink-700">Sensitivity</span>

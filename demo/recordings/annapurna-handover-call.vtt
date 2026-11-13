@@ -1,0 +1,41 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:07.200
+<v Priya Sharma>Hi Arjun, I'm Priya. Thanks for joining, this is my handover call for the canteen app.</v>
+
+2
+00:00:07.800 --> 00:00:13.495
+<v Arjun Mehta>Hi Priya, this is Arjun. Go ahead, I'm taking notes.</v>
+
+3
+00:00:14.095 --> 00:00:24.270
+<v Priya Sharma>First, payments. The Razorpay webhook secret has to be rotated every ninety days. The next rotation is due on the fifth of December.</v>
+
+4
+00:00:24.870 --> 00:00:27.325
+<v Arjun Mehta>Who has access to rotate it?</v>
+
+5
+00:00:27.925 --> 00:00:34.450
+<v Priya Sharma>Only me right now. Neha should get admin access on the Razorpay dashboard before I leave.</v>
+
+6
+00:00:35.050 --> 00:00:45.440
+<v Priya Sharma>Second, menu changes. Mr Joshi, the canteen manager, approves every menu change, and he only does it on Thursdays.</v>
+
+7
+00:00:46.040 --> 00:00:49.620
+<v Arjun Mehta>Okay. And the menu cache problem?</v>
+
+8
+00:00:50.220 --> 00:00:59.435
+<v Priya Sharma>It still breaks every Monday morning. I restart the dyno. The real fix is to stop caching the vendor spreadsheet for a whole week.</v>
+
+9
+00:01:00.035 --> 00:01:03.515
+<v Arjun Mehta>Got it. Anything else I should know?</v>
+
+10
+00:01:04.115 --> 00:01:11.265
+<v Priya Sharma>We decided today that the dark mode toggle is out of the launch scope. It moves to the January release.</v>

@@ -10,6 +10,7 @@ import { fmtDate, fmtDateTime, useGapList, useHandoverList, useRenameHandover, u
 import { useCurrentShare } from '@/pages/recipient/RecipientPages';
 import { Avatar, Kbd, Logo } from '@/components/ui/misc';
 import { NextStepLink } from '@/components/layout/guide';
+import { RecordingPlayer } from '@/components/ui/recording';
 import { chooseHandover, useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 
@@ -398,6 +399,7 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+      <RecordingPlayer />
     </div>
   );
 }

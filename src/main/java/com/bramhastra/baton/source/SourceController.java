@@ -83,6 +83,7 @@ public class SourceController {
                                 @RequestParam(required = false) String branch,
                                 @RequestParam(required = false) String channel,
                                 @RequestParam(required = false) String folder,
+                                @RequestParam(required = false) String meetingDate,
                                 @RequestParam(required = false) MultipartFile file) throws IOException {
         CurrentUser me = currentUser.get();
         access.requireMember(me, projectId);
@@ -133,6 +134,9 @@ public class SourceController {
             staged = new StagedFile(name, file.getContentType(), file.getBytes());
             config.put("filename", name);
             config.put("size", file.getSize());
+            if (type == SourceType.MEETING_RECORDING && meetingDate != null && meetingDate.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) {
+                config.put("date", meetingDate);
+            }
         }
 
         SourceConnector connector = connectors.stream().filter(c -> c.supports(type)).findFirst()
@@ -193,6 +197,55 @@ public class SourceController {
         UUID jobId = jobs.enqueue(JobKind.INGEST_SOURCE, s.projectId(), me.id(), Map.of("sourceId", s.id().toString()));
         audit.record(me.id(), "SOURCE_SYNC_REQUESTED", "source", s.id(), s.projectId(), Map.of());
         return new CreatedSource(SourceView.of(sources.findById(s.id()).orElseThrow()), jobId);
+    }
+
+    /**
+     * The recording's audio, for playing the moment a claim cites. Anyone who may see the source may play it;
+     * it is decrypted per request and never cached by the browser.
+     */
+    @GetMapping("/sources/{sourceId}/media")
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> media(@PathVariable UUID sourceId) {
+        SourceRow s = visible(sourceId);
+        if (s.type() != SourceType.MEETING_RECORDING || s.status() != SourceRow.SourceStatus.READY) {
+            throw new ApiException(ErrorCode.NOT_FOUND, "This source has no recording");
+        }
+        SourceRepository.SealedFile f = sources.loadStaged(s.id())
+                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "The recording was deleted; the transcript remains"));
+        String ext = f.filename().contains(".") ? f.filename().substring(f.filename().lastIndexOf('.') + 1).toLowerCase(java.util.Locale.ROOT) : "";
+        String mime = switch (ext) {
+            case "mp3", "mpga", "mpeg" -> "audio/mpeg";
+            case "m4a", "mp4" -> "audio/mp4";
+            case "wav" -> "audio/wav";
+            case "webm" -> "audio/webm";
+            case "ogg", "oga" -> "audio/ogg";
+            case "flac" -> "audio/flac";
+            default -> "application/octet-stream";
+        };
+        audit.record(currentUser.get().id(), "RECORDING_PLAYED", "source", s.id(), s.projectId(), Map.of());
+        return org.springframework.http.ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(mime))
+                .header("Cache-Control", "no-store")
+                .body(new org.springframework.core.io.ByteArrayResource(crypto.decrypt(f.ciphertext(), f.iv())));
+    }
+
+    /** Deletes the audio and keeps the transcript, so claims keep their quotes and timestamps. Lead only. */
+    @org.springframework.web.bind.annotation.DeleteMapping("/sources/{sourceId}/media")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Transactional
+    public void deleteMedia(@PathVariable UUID sourceId) {
+        CurrentUser me = currentUser.get();
+        SourceRow s = visible(sourceId);
+        access.requireLead(me, s.projectId());
+        if (s.type() != SourceType.MEETING_RECORDING) {
+            throw new ApiException(ErrorCode.NOT_FOUND, "This source has no recording");
+        }
+        if (s.status() == SourceRow.SourceStatus.PENDING || s.status() == SourceRow.SourceStatus.SYNCING) {
+            throw new ApiException(ErrorCode.RUN_IN_PROGRESS, "Wait until the recording has been transcribed");
+        }
+        sources.deleteStaged(s.id());
+        jdbc.sql("UPDATE source SET config = config || '{\"audioDeleted\": true}'::jsonb WHERE id = :id")
+                .param("id", s.id()).update();
+        audit.record(me.id(), "RECORDING_DELETED", "source", s.id(), s.projectId(), Map.of());
     }
 
     /** Member of the project AND allowed by the access policy, else 404. */

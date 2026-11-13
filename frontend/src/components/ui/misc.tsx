@@ -1,6 +1,7 @@
-import { AlertTriangle, Check, FileText, RefreshCw, X, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, AudioLines, Check, FileText, RefreshCw, X, type LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { PlayMomentButton } from './recording';
 
 /** The Baton mark: a lowercase b whose stem is the baton and whose amber bowl is being handed on. */
 export function LogoMark({ size = 28, dark, animate, className }: { size?: number; dark?: boolean; animate?: boolean; className?: string }) {
@@ -169,12 +170,17 @@ export function IconTile({ icon: Icon, className, size = 36 }: { icon: LucideIco
 }
 
 /** The "receipt": a verbatim source quote, checked against stored text by the citation verifier. */
-export function EvidenceQuote({ source, quote, matched = true, className }: { source: string; quote: string; matched?: boolean; className?: string }) {
+export function EvidenceQuote({ source, quote, matched = true, className, play }: {
+  source: string; quote: string; matched?: boolean; className?: string;
+  /** A quote from a meeting recording: play the moment it was said. */
+  play?: { sourceId: string; at: number } | null;
+}) {
   return (
     <figure className={cn('rounded-md border-l-[3px] border-baton bg-paper p-3', className)}>
       <figcaption className="flex items-center gap-1.5 font-mono text-caption text-ink-500">
-        <FileText className="size-3" aria-hidden />
-        {source}
+        {play ? <AudioLines className="size-3" aria-hidden /> : <FileText className="size-3" aria-hidden />}
+        <span className="min-w-0 flex-1">{source}</span>
+        {play && <PlayMomentButton sourceId={play.sourceId} at={play.at} label={source} />}
       </figcaption>
       <blockquote className="mt-1.5 font-mono text-small leading-5 text-ink-900">{quote}</blockquote>
       {matched && (

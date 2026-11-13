@@ -98,7 +98,8 @@ public class ClaimQueryService {
         Map<UUID, Integer> invalid = new HashMap<>();
         jdbc.sql("""
                 SELECT e.claim_id, e.id, e.chunk_id, e.quote, e.match_score, e.start_offset, e.end_offset, e.valid,
-                       d.title, d.author, d.authored_at, d.url, s.type, s.title AS source_title
+                       d.title, d.author, d.authored_at, d.url, s.type, s.title AS source_title, s.id AS source_id,
+                       CASE WHEN s.type = 'MEETING_RECORDING' THEN k.text END AS transcript
                 FROM evidence e JOIN chunk k ON k.id = e.chunk_id JOIN document d ON d.id = k.document_id
                 JOIN source s ON s.id = d.source_id
                 WHERE e.claim_id IN (:ids)
@@ -110,13 +111,17 @@ public class ClaimQueryService {
                         return null;
                     }
                     Timestamp at = rs.getTimestamp("authored_at");
+                    String transcript = rs.getString("transcript");
+                    Integer atSeconds = transcript == null ? null
+                            : com.bramhastra.baton.source.connector.Transcript.secondsAt(transcript, (Integer) rs.getObject("start_offset"));
                     evidence.computeIfAbsent(claimId, k -> new ArrayList<>()).add(new EvidenceView(
                             rs.getObject("id", UUID.class), rs.getObject("chunk_id", UUID.class), rs.getString("quote"),
                             rs.getDouble("match_score"), (Integer) rs.getObject("start_offset"),
                             (Integer) rs.getObject("end_offset"),
                             new SourceRef(SourceType.valueOf(rs.getString("type")), rs.getString("source_title"),
                                     rs.getString("title"), rs.getString("author"),
-                                    at == null ? null : at.toInstant(), rs.getString("url"))));
+                                    at == null ? null : at.toInstant(), rs.getString("url")),
+                            rs.getObject("source_id", UUID.class), atSeconds));
                     return null;
                 }).list();
 
@@ -212,8 +217,9 @@ public class ClaimQueryService {
     public record SourceRef(SourceType type, String sourceTitle, String title, String author, Instant date, String url) {
     }
 
+    /** {@code atSeconds}: for a meeting recording, the moment in the audio where the quoted words were said. */
     public record EvidenceView(UUID id, UUID chunkId, String quote, double matchScore, Integer start, Integer end,
-                               SourceRef source) {
+                               SourceRef source, UUID sourceId, Integer atSeconds) {
     }
 
     public record LinkView(String kind, UUID claimId, boolean resolved) {

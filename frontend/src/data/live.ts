@@ -8,7 +8,7 @@ export type SensitivityDto = 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'RESTRICTE
 export type ClaimStatusDto = 'VERIFIED' | 'SINGLE_SOURCE' | 'INFERRED' | 'CONFLICTING' | 'MISSING_EVIDENCE' | 'STALE';
 export type ReviewStateDto = 'PENDING' | 'ACCEPTED' | 'EDITED' | 'REJECTED' | 'NEEDS_INFO';
 export type HandoverStatusDto = 'DRAFT' | 'RECONSTRUCTING' | 'IN_REVIEW' | 'APPROVED' | 'SHARED' | 'ARCHIVED';
-export type SourceTypeDto = 'GITHUB' | 'SLACK' | 'GOOGLE_DRIVE' | 'TASK_CSV' | 'DOCUMENT' | 'MEETING_NOTES' | 'CHAT_EXPORT' | 'TESTIMONY';
+export type SourceTypeDto = 'GITHUB' | 'SLACK' | 'GOOGLE_DRIVE' | 'TASK_CSV' | 'DOCUMENT' | 'MEETING_NOTES' | 'MEETING_RECORDING' | 'CHAT_EXPORT' | 'TESTIMONY';
 
 export interface UserDto {
   id: string; email: string; displayName: string; orgRole: 'ADMIN' | 'MEMBER'; clearance: SensitivityDto; groups: string[];
@@ -31,6 +31,8 @@ export interface SourceDto {
 export interface EvidenceDto {
   id: string; chunkId: string; quote: string; matchScore: number; start: number | null; end: number | null;
   source: { type: SourceTypeDto; sourceTitle: string; title: string; author: string | null; date: string | null; url: string | null };
+  /** Meeting recordings: the source to play and the second the quoted words were said. */
+  sourceId?: string; atSeconds?: number | null;
 }
 export interface ClaimDto {
   id: string; type: string; version: number; title: string; body: string | null; attributes: Record<string, unknown>;
@@ -69,7 +71,7 @@ export const CLAIM_TYPE_LABEL: Record<string, string> = {
 };
 export const typeLabel = (t: string) => CLAIM_TYPE_LABEL[t] ?? t;
 export const SOURCE_TYPE_LABEL: Record<SourceTypeDto, string> = {
-  GITHUB: 'GitHub', SLACK: 'Slack', GOOGLE_DRIVE: 'Google Drive', TASK_CSV: 'Task board', DOCUMENT: 'Document', MEETING_NOTES: 'Meeting notes', CHAT_EXPORT: 'Chat export', TESTIMONY: 'Testimony',
+  GITHUB: 'GitHub', SLACK: 'Slack', GOOGLE_DRIVE: 'Google Drive', TASK_CSV: 'Task board', DOCUMENT: 'Document', MEETING_NOTES: 'Meeting notes', MEETING_RECORDING: 'Meeting recording', CHAT_EXPORT: 'Chat export', TESTIMONY: 'Testimony',
 };
 /** Recipient-facing wording for an evidence status. */
 export const STATUS_LABEL: Record<ClaimStatusDto, string> = {
@@ -83,6 +85,9 @@ export function evidenceLabel(e: EvidenceDto) {
   const d = e.source.date ? new Date(e.source.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   return [e.source.sourceTitle, e.source.title !== e.source.sourceTitle ? e.source.title : null, d].filter(Boolean).join(' · ');
 }
+/** For a quote from a meeting recording with its audio kept: where to play it. */
+export const playOf = (e: EvidenceDto) => e.sourceId && e.atSeconds != null && e.source.type === 'MEETING_RECORDING'
+  ? { sourceId: e.sourceId, at: e.atSeconds } : null;
 export const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 export const fmtDateTime = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -177,10 +182,19 @@ export function useStartReconstruct(handoverId?: string | null) {
   });
 }
 
+/** Deletes a recording's audio; the transcript and every quote stay. */
+export function useDeleteRecording(projectId?: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sourceId: string) => api<void>(`/api/sources/${sourceId}/media`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.sources(projectId ?? '') }),
+  });
+}
+
 export function useCreateSource(projectId?: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: { type: SourceTypeDto; title: string; sensitivity: SensitivityDto; aclGroups: string[]; file?: File; repo?: string; branch?: string; channel?: string; folder?: string }) => {
+    mutationFn: (p: { type: SourceTypeDto; title: string; sensitivity: SensitivityDto; aclGroups: string[]; file?: File; repo?: string; branch?: string; channel?: string; folder?: string; meetingDate?: string }) => {
       const f = new FormData();
       f.set('type', p.type);
       f.set('title', p.title);
@@ -192,6 +206,7 @@ export function useCreateSource(projectId?: string | null) {
       if (p.branch) f.set('branch', p.branch);
       if (p.channel) f.set('channel', p.channel);
       if (p.folder) f.set('folder', p.folder);
+      if (p.meetingDate) f.set('meetingDate', p.meetingDate);
       return api<{ source: SourceDto; jobId: string }>(`/api/projects/${projectId}/sources`, { method: 'POST', body: f });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.sources(projectId ?? '') }),

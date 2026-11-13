@@ -4,7 +4,7 @@ import { SensitivityChip, StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Radio, Textarea } from '@/components/ui/form';
 import { Banner, Card, EvidenceQuote, PageHeader, QueryState } from '@/components/ui/misc';
-import { STATUS, evidenceLabel, fmtDate, sens, useClaim, useGapList, useResolveConflictLive, type ClaimDto, type GapDto } from '@/data/live';
+import { STATUS, evidenceLabel, playOf, fmtDate, sens, useClaim, useGapList, useResolveConflictLive, type ClaimDto, type GapDto } from '@/data/live';
 import { useSession } from '@/lib/auth';
 import { ApiError } from '@/lib/http';
 
@@ -102,7 +102,7 @@ function Side({ label, claim, newer }: { label: string; claim: ClaimDto; newer: 
     <div className="flex h-full flex-col gap-2.5 rounded-xl border border-line p-4">
       <div className="flex items-center gap-2"><span className="overline text-ink-500">{label}</span>{badge}</div>
       <p className="text-small font-medium">{claim.title}</p>
-      {ev ? <EvidenceQuote source={evidenceLabel(ev)} quote={`“${ev.quote}”`} /> : <p className="text-caption text-ink-500">No visible quote.</p>}
+      {ev ? <EvidenceQuote source={evidenceLabel(ev)} quote={`“${ev.quote}”`} play={playOf(ev)} /> : <p className="text-caption text-ink-500">No visible quote.</p>}
       <p className="text-caption text-ink-500">Confidence {claim.confidence.toFixed(2)}</p>
     </div>
   );
