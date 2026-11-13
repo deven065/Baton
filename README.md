@@ -81,14 +81,21 @@ To sign up a test company against a local database, start the API with `ALLOW_PR
 ## Tests
 
 ```bash
-./mvnw test                   # 107 tests against a real pgvector container (needs Docker)
+./mvnw test                   # 110 tests against a real pgvector container (needs Docker)
 ```
 
 They also run on every push in [GitHub Actions](.github/workflows/ci.yml), together with the frontend build.
 
-**Evaluation:** the demo data plants 25 facts ([`planted-facts.json`](demo/annapurna/planted-facts.json)).
-Offline mode finds **23 of 25 (92%)**, with no leaked secrets and no permission leaks
-([report](demo/evaluation-report.md)). Score any running server with `python demo/evaluate.py <api-url>`.
+**Evaluation:** two synthetic projects with answer keys. Project Annapurna plants 25 facts
+([`planted-facts.json`](demo/annapurna/planted-facts.json)); Project Godavari is harder: 25 plainly stated, partly
+Hinglish facts plus 7 traps (a joke, a rumour, a rejected idea, sarcasm, superseded values) and an exhaustive answer
+key for precision ([`planted-facts.json`](demo/godavari/planted-facts.json)). Offline rules find **23 of 25** on
+Annapurna and **8 of 25** on Godavari, with no leaked secrets, no permission leaks and no trap shown as fact.
+`python demo/benchmark.py` compares offline mode with language models on recall, precision, traps, tokens and cost
+([report](demo/benchmark-report.md)).
+
+**Model check:** with a model connected, reconstruction runs a second model pass that asks whether each verified
+quote really supports its claim. A "not supported" verdict stops the claim being shown as fact until a person decides.
 
 ## Configuration
 

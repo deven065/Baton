@@ -34,3 +34,4 @@ build/
 
 ### Local-only settings ###
 /config/
+__pycache__/

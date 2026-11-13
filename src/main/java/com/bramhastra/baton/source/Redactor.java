@@ -43,6 +43,11 @@ public class Redactor {
                             + "\\s*[:=]\\s*[\"']?(?<v>[A-Za-z0-9_\\-./+=]{12,})")),
             new Rule(Kind.PASSWORD, Pattern.compile(
                     "(?i)\\b(?:password|passwd|pwd|passcode)\\b\\s*(?:\\bis\\b|:|=)\\s*[\"']?(?<v>[^\\s\"',;]{4,})")),
+            // Chat phrasing ("token if anyone needs it: cf_…"): a long value mixing letters and digits that follows
+            // one of these words within the same line. Ordinary words never contain digits, so they stay.
+            new Rule(Kind.API_KEY, Pattern.compile(
+                    "(?i)\\b(?:api[_ -]?key|token|secret|password|passwd|credentials?|key)\\b[^\\n]{0,40}?"
+                            + "(?<v>(?<![\\w-])(?=[A-Za-z0-9_\\-]*\\d)(?=[A-Za-z0-9_\\-]*[A-Za-z])[A-Za-z0-9_\\-]{16,}(?![\\w-]))")),
             // Personal data
             new Rule(Kind.EMAIL, Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")),
             new Rule(Kind.PHONE, Pattern.compile("(?<![\\w-])\\+?\\d[\\d -]{8,16}\\d(?![\\w-])")));

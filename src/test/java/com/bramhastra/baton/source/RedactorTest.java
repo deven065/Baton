@@ -30,6 +30,16 @@ public class RedactorTest {
     }
 
     @Test
+    void redactsTokensPastedInChatPhrasing() {
+        String fake = "cf_FAKE_" + "t0ken_9f8e7d6c5b4a";
+        Redactor.Result r = redactor.redact("token if anyone needs it: " + fake);
+        assertThat(r.text()).doesNotContain(fake).contains("[API_KEY_1]");
+        // Ordinary words and identifiers without digits after "key" stay readable.
+        String plain = "The key decision: keep the registration-page-redesign branch for now.";
+        assertThat(redactor.redact(plain).text()).isEqualTo(plain);
+    }
+
+    @Test
     void sameValueGetsSameToken() {
         Redactor.Result r = redactor.redact("Mail priya@club.example. Again: priya@club.example; also arjun@club.example");
         assertThat(r.text()).isEqualTo("Mail [EMAIL_1]. Again: [EMAIL_1]; also [EMAIL_2]");

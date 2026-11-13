@@ -162,6 +162,12 @@ public class ClaimRepository {
         jdbc.sql("DELETE FROM claim WHERE id = :id").param("id", claimId).update();
     }
 
+    /** Merges keys into the claim's attributes (used for the model check verdict). */
+    public void mergeAttributes(UUID claimId, Map<String, Object> attrs) {
+        jdbc.sql("UPDATE claim SET attributes = attributes || CAST(:a AS jsonb), updated_at = now() WHERE id = :id")
+                .param("id", claimId).param("a", json.writeValueAsString(attrs)).update();
+    }
+
     public void setCritical(UUID claimId) {
         jdbc.sql("UPDATE claim SET critical = TRUE WHERE id = :id").param("id", claimId).update();
     }

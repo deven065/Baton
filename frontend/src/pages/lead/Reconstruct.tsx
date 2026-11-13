@@ -14,6 +14,7 @@ const STAGES: [string, string, string][] = [
   ['EXTRACT', 'Claim extraction', 'Redacted chunks in batches · the model only proposes'],
   ['VERIFY', 'Citation verification', 'Every quote is located in its stored chunk by code'],
   ['CONSOLIDATE', 'Merge similar claims', 'Duplicates folded together, evidence kept'],
+  ['CHECK', 'Model check', 'A second model pass asks: does the quote really support the claim?'],
   ['CONFLICT', 'Conflict detection', 'Claims that disagree are linked'],
   ['SCORE', 'Status and confidence', 'Computed by code from sources, quotes and recency'],
   ['GAP', 'Exit-interview questions', 'What sources cannot answer becomes a question'],
@@ -69,6 +70,8 @@ export default function Reconstruct() {
       case 'EXTRACT': return `${n(stats.extracted)} claims · ${n(stats.batches)} batches${n(stats.batchesFailed) ? ` · ${n(stats.batchesFailed)} failed` : ''}`;
       case 'VERIFY': return `${n(stats.quotesVerified)} quotes verified · ${n(stats.quotesRejected)} rejected`;
       case 'CONSOLIDATE': return `${n(stats.merged)} merged`;
+      case 'CHECK': return n(stats.modelChecked) ? `${n(stats.modelChecked)} checked · ${n(stats.modelDisputed)} disputed`
+        : n(stats.modelCheckSkipped) ? 'skipped: offline mode' : '–';
       case 'CONFLICT': return `${n(stats.conflicts)} conflicts`;
       case 'GAP': return `${n(stats.gapQuestions)} questions`;
       case 'TIMELINE': return `${n(stats.timelineEvents)} events`;
@@ -104,8 +107,8 @@ export default function Reconstruct() {
       <div className="grid gap-6 xl:grid-cols-[1fr_460px]">
         <Card className="flex flex-col gap-1">
           <CardHeader
-            title="Pipeline · 8 stages"
-            sub={running ? live?.message || 'Starting…' : latest ? `Last run ${fmtDateTime(latest.startedAt)} · ${latest.model} · prompt ${latest.promptVersion}` : 'Not run yet'}
+            title={`Pipeline · ${STAGES.length} stages`}
+            sub={running ? live?.message || 'Starting…' : latest ? `Last run ${fmtDateTime(latest.startedAt)} · ${latest.model} · prompt ${latest.promptVersion}${n(stats.tokensIn) ? ` · ${(n(stats.tokensIn) + n(stats.tokensOut)).toLocaleString()} tokens` : ''}` : 'Not run yet'}
             right={running
               ? <span className="text-h2 font-semibold text-brand-600" aria-live="polite">{live?.percent ?? 0}%</span>
               : latest && <StatusBadge status={latest.status === 'SUCCEEDED' ? 'verified' : latest.status === 'PARTIAL' ? 'inferred' : latest.status === 'FAILED' ? 'conflicting' : 'single'} label={latest.status.toLowerCase()} />}

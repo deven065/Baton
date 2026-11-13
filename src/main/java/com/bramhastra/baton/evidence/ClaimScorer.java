@@ -121,6 +121,31 @@ public class ClaimScorer {
         return new ScoreResult(status, conf, sens, List.copyOf(acl), reasons);
     }
 
+    /**
+     * Applies the model check verdict (CheckStage) to a code-computed result. It can only weaken a claim: an
+     * UNSUPPORTED quote turns a fact into INFERRED, which a person must decide before approval; PARTIAL lowers the
+     * confidence. Once a person has reviewed the claim their decision stands, so call this for unreviewed claims only.
+     */
+    public static ScoreResult applyModelCheck(ScoreResult r, String verdict, String reason) {
+        if (verdict == null || verdict.equals("SUPPORTED")) {
+            return r;
+        }
+        boolean shownAsFact = r.status() == ClaimStatus.VERIFIED || r.status() == ClaimStatus.SINGLE_SOURCE;
+        List<String> reasons = new ArrayList<>(r.reasons());
+        String why = reason == null || reason.isBlank() ? "" : ": " + reason.strip();
+        if (verdict.equals("UNSUPPORTED")) {
+            reasons.add("model check: the quote does not support this claim as written" + why);
+            return new ScoreResult(shownAsFact ? ClaimStatus.INFERRED : r.status(),
+                    Math.round(r.confidence() * 500) / 1000.0, r.sensitivity(), r.aclGroups(), reasons);
+        }
+        if (verdict.equals("PARTIAL")) {
+            reasons.add("model check: the quote supports only part of this claim" + why);
+            return new ScoreResult(r.status(), Math.round(Math.max(0, r.confidence() - 0.15) * 1000) / 1000.0,
+                    r.sensitivity(), r.aclGroups(), reasons);
+        }
+        return r;
+    }
+
     static double recency(long days) {
         return days <= 14 ? 1 : days >= 120 ? 0 : 1 - (days - 14) / 106.0;
     }

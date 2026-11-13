@@ -114,7 +114,7 @@ source to members of those groups.
 ### Handover workflow
 - **Sources**: upload chat exports, meeting notes, documents and task-board CSVs, or read live from GitHub, Slack
   and Google Drive. Everything is redacted before it is stored.
-- **Reconstruct**: an 8-stage pipeline turns sources into claims, conflicts, a timeline and exit questions, with live
+- **Reconstruct**: a 9-stage pipeline turns sources into claims, conflicts, a timeline and exit questions, with live
   progress.
 - **Review**: accept, edit, reject or ask for more information on each claim, with keyboard shortcuts, full revision
   history and optimistic locking (two people cannot overwrite each other).
@@ -194,6 +194,7 @@ source to members of those groups.
    | `EXTRACT` | Redacted passages, wrapped in `<chunk>` tags as untrusted data, are sent to the model in batches grouped by access class |
    | `VERIFY` | Code locates every quoted sentence in its passage; unmatched quotes are dropped |
    | `CONSOLIDATE` | Duplicate claims are merged |
+   | `CHECK` | Model-graded check: a second model pass judges whether each verified quote actually supports its claim (supported, partly, not supported). It can only weaken a claim: "not supported" turns a fact into *inferred*, which a person must decide before approval. Skipped in offline mode |
    | `CONFLICT` | Claims that contradict each other are linked |
    | `SCORE` | Status and confidence are computed by code |
    | `GAP` | 6–12 exit-interview questions are written |
@@ -712,7 +713,7 @@ decides each person's role. The Figma plugin that draws the product design (file
 ## 19. Testing
 
 ```bash
-./mvnw test          # 107 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
+./mvnw test          # 110 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
 cd frontend && npx tsc -b --noEmit && npm run build
 ```
 
@@ -721,9 +722,18 @@ evaluation report to the run's summary page.
 
 ### Evaluation against the planted facts
 
-`demo/annapurna/planted-facts.json` lists the **25 facts** planted across the seven demo sources, plus trust checks
-(injected instructions, five planted secrets, restricted facts). A fact is found when a claim of the expected type
-contains its key words, or for gaps, an exit question does.
+Two synthetic projects, each with an answer key:
+
+- **Project Annapurna** (`demo/annapurna/planted-facts.json`): **25 facts** planted across seven sources, plus trust
+  checks (injected instructions, five planted secrets, restricted facts).
+- **Project Godavari** (`demo/godavari/planted-facts.json`), the harder one: 25 facts stated plainly (few signal
+  words such as "Decision:"), partly in Hinglish, mixed with **7 traps** — a joke, a hypothetical, a rumour, a
+  rejected idea, sarcasm, and two values that were later changed — and an instruction aimed at the AI. Its answer key
+  also lists every other true statement in the sources, so **precision** can be measured: a claim shown as fact is
+  correct when it matches the key, wrong when it matches a trap, and unmatched otherwise.
+
+A fact is found when a claim of the expected type contains its key words (in its text or its quotes), or for gaps,
+an exit question does.
 
 - **On every build:** `PlantedFactsEvaluationTest` reconstructs all seven sources in offline mode, scores them,
   writes `target/evaluation-report.md` and fails if recall drops below the floor or any trust check fails.
@@ -733,6 +743,16 @@ contains its key words, or for gaps, an exit question does.
   bash demo/load-demo.sh http://localhost:8080
   python demo/evaluate.py http://localhost:8080 --report demo/evaluation-report.md
   ```
+
+**Comparing models.** `demo/benchmark.py` creates a fresh project per dataset, loads the sources, and reconstructs the
+same handover once per configuration (offline rules first, then each model), reporting recall, precision, traps,
+trust checks, model-check verdicts, tokens, time and list-price cost ([`demo/benchmark-report.md`](../demo/benchmark-report.md)):
+
+```bash
+DEMO_LOCKED=false ./mvnw spring-boot:run          # the benchmark changes the demo workspace's AI settings
+export GROQ_API_KEY=...                          # your own key; it goes only to your Baton server
+python demo/benchmark.py http://localhost:8080 --configs offline,groq:llama-3.3-70b-versatile,groq:openai/gpt-oss-120b
+```
 
 Latest result, offline rules ([`demo/evaluation-report.md`](../demo/evaluation-report.md)): **23 of 25 (92%)**, all
 checks pass. The two misses are plain statements with no signal word for the rules ("secrets live in the Render
@@ -747,7 +767,7 @@ dashboard", "renewal is due on 2026-12-01"); a model is expected to find them.
 | Workspaces and admin | `WorkspaceApiTest`, `DatabaseUrlTest`, `CompanyAdminApiTest`, `HardeningApiTest`, `SafeLogTest` |
 | Handover lifecycle | `HandoverStateMachineTest`, `LifecycleApiTest`, `HandoverFeaturesApiTest` |
 | AI, connectors, billing | `AiSettingsApiTest`, `ConnectorsAndBillingApiTest` (fake AI, Slack, Google and Razorpay servers) |
-| Evaluation | `PlantedFactsEvaluationTest` (25 planted facts, secrets, injection, restricted facts) |
+| Evaluation | `PlantedFactsEvaluationTest` (25 planted facts, secrets, injection, restricted facts), `ModelCheckTest` (disputed claims stop being shown as fact and block approval) |
 | Deployment safety | `DemoGuardTest` (shared demo cannot be vandalised), `SecretsCheckTest` |
 
 Tests cover, among others: workspace isolation, redaction before AI, quote verification, permission filtering,

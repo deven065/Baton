@@ -69,6 +69,9 @@ public class ScoreStage implements PipelineStage {
                     ev.stream().map(e -> new ClaimScorer.Ev(e.sourceId(), e.sourceType(), e.authoredAt(),
                             e.matchScore(), e.valid(), e.chunkSensitivity(), e.chunkAcl())).toList(),
                     invalid, extra));
+            if (c.reviewState().equals("PENDING") || c.reviewState().equals("NEEDS_INFO")) {
+                r = ClaimScorer.applyModelCheck(r, c.attr("modelCheck"), c.attr("modelCheckReason"));
+            }
             claims.updateScore(c.id(), r.status().name(), r.confidence(), r.sensitivity(), r.aclGroups(), r.reasons());
         }
     }

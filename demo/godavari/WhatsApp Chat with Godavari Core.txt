@@ -1,0 +1,17 @@
+01/10/2026, 19:00 - Messages and calls are end-to-end encrypted. No one outside of this chat can read them.
+01/10/2026, 19:00 - Neha Kulkarni created group "Godavari Core"
+03/10/2026, 21:02 - Arjun Mehta: chalo final, submissions will go through Devfolio. I'll set up the org page
+03/10/2026, 21:05 - Rahul Desai: what if we make it fully online? no venue headache
+03/10/2026, 21:07 - Neha Kulkarni: no, sponsors want an in-person event
+05/10/2026, 22:31 - Priya Sharma: lol let's just hold it on the moon, plenty of space there
+06/10/2026, 12:10 - Rahul Desai: can we use Discord for announcements?
+06/10/2026, 12:14 - Neha Kulkarni: No Discord. Announcements stay on this group and on email.
+09/10/2026, 20:45 - Arjun Mehta: team size max 4 rakhte hai, simple
+11/10/2026, 23:02 - Priya Sharma: heard someone say Google might sponsor us, no idea if true
+14/10/2026, 19:30 - Arjun Mehta: godavari-hack.in DNS is on my personal Cloudflare account, have to move it to the club before I leave
+14/10/2026, 19:31 - Arjun Mehta: token if anyone needs it: cf_FAKE_t0ken_9f8e7d6c5b4a
+16/10/2026, 17:55 - Rahul Desai: oh sure, the auditorium projector works perfectly 🙄 died for the third time today
+20/10/2026, 18:20 - Neha Kulkarni: Change: max three members per team. Judges asked for smaller teams.
+22/10/2026, 13:40 - Arjun Mehta: QR scanner app crashes whenever the phone is in battery saver, tell volunteers to switch it off
+25/10/2026, 10:12 - Arjun Mehta: Meera from college IT runs the SSO, her number is 98220 11223
+25/10/2026, 10:13 - Arjun Mehta: <Media omitted>

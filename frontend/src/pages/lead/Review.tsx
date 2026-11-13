@@ -180,6 +180,7 @@ export default function Review() {
                 <span className={cn('text-small font-medium', selected.confidence >= 0.8 ? 'text-verified' : selected.confidence >= 0.6 ? 'text-single' : 'text-inferred')}>Confidence {selected.confidence.toFixed(2)}</span>
                 <ReviewTag state={selected.reviewState} />
               </div>
+              <ModelCheck verdict={selected.attributes.modelCheck} reason={selected.attributes.modelCheckReason} />
               {selected.flags.includes('PROMPT_INJECTION_SUSPECTED') && (
                 <Banner tone="conflict" icon={ShieldAlert}>The source text contains instructions aimed at the AI. They were treated as data, but read the quote carefully before accepting.</Banner>
               )}
@@ -243,4 +244,22 @@ function ReviewTag({ state }: { state: ReviewStateDto }) {
   if (state === 'REJECTED')
     return <span className="flex shrink-0 items-center gap-1 text-caption font-medium text-ink-400"><X className="size-3" aria-hidden />Rejected</span>;
   return <span className={cn('shrink-0 text-caption', state === 'NEEDS_INFO' ? 'font-medium text-missing' : 'text-ink-400')}>{STATE_LABEL[state]}</span>;
+}
+
+const MODEL_CHECK: Record<string, { label: string; tone: string; note: string }> = {
+  SUPPORTED: { label: 'Model check: supported', tone: 'border-verified/25 bg-verified-bg text-verified', note: 'A second model pass agrees the quote states this.' },
+  PARTIAL: { label: 'Model check: partly supported', tone: 'border-inferred/25 bg-inferred-bg text-inferred', note: 'The quote supports only part of this claim. Edit it to match before accepting.' },
+  UNSUPPORTED: { label: 'Model check: not supported', tone: 'border-conflict/25 bg-conflict-bg text-conflict', note: 'The quote exists, but a second model pass says it does not support the claim as written. It is not shown as fact until you decide.' },
+};
+
+/** The CHECK stage's verdict. It can only weaken a claim; a person's review decision always wins. */
+function ModelCheck({ verdict, reason }: { verdict: unknown; reason: unknown }) {
+  const v = typeof verdict === 'string' ? MODEL_CHECK[verdict] : undefined;
+  if (!v) return null;
+  return (
+    <div className={cn('flex flex-col gap-0.5 rounded-xl border px-3.5 py-2.5', v.tone)}>
+      <span className="text-small font-semibold">{v.label}</span>
+      <span className="text-caption text-ink-700">{typeof reason === 'string' && reason ? `“${reason}” · ` : ''}{v.note}</span>
+    </div>
+  );
 }

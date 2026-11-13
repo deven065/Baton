@@ -86,4 +86,26 @@ class ClaimScorerTest {
         assertThat(ClaimScorer.recency(67)).isEqualTo(0.5);
         assertThat(ClaimScorer.recency(500)).isEqualTo(0.0);
     }
+
+    @Test
+    void theModelCheckCanOnlyWeakenAClaim() {
+        var fact = score(false, false, ev(chat, SourceType.CHAT_EXPORT, "2026-11-01", true, Sensitivity.INTERNAL));
+        assertThat(fact.status()).isEqualTo(ClaimStatus.SINGLE_SOURCE);
+
+        var unsupported = ClaimScorer.applyModelCheck(fact, "UNSUPPORTED", "the message is a joke");
+        assertThat(unsupported.status()).isEqualTo(ClaimStatus.INFERRED);
+        assertThat(unsupported.confidence()).isLessThan(fact.confidence());
+        assertThat(unsupported.reasons()).anyMatch(r -> r.contains("model check") && r.contains("the message is a joke"));
+
+        var partial = ClaimScorer.applyModelCheck(fact, "PARTIAL", null);
+        assertThat(partial.status()).isEqualTo(ClaimStatus.SINGLE_SOURCE);
+        assertThat(partial.confidence()).isLessThan(fact.confidence());
+
+        assertThat(ClaimScorer.applyModelCheck(fact, "SUPPORTED", "ok")).isSameAs(fact);
+        assertThat(ClaimScorer.applyModelCheck(fact, null, null)).isSameAs(fact);
+
+        // A conflict stays a conflict: the check never hides a disagreement.
+        var conflict = score(false, true, ev(chat, SourceType.CHAT_EXPORT, "2026-11-01", true, Sensitivity.INTERNAL));
+        assertThat(ClaimScorer.applyModelCheck(conflict, "UNSUPPORTED", "x").status()).isEqualTo(ClaimStatus.CONFLICTING);
+    }
 }

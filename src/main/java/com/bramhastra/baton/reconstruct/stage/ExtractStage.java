@@ -142,6 +142,7 @@ public class ExtractStage implements PipelineStage {
                 user.toString(), 0.1, 4096, true);
         LlmClient.LlmResponse response = llm.complete(req);
         ctx.modelUsed(response.model());
+        tokens(ctx, response);
         Output out;
         try {
             out = parse(response.content());
@@ -149,7 +150,9 @@ public class ExtractStage implements PipelineStage {
             LlmClient.LlmRequest repair = new LlmClient.LlmRequest(req.promptId(), model, systemPrompt,
                     req.user() + "\nYour previous reply was not valid JSON (" + first.getMessage()
                             + "). Reply with ONLY the JSON object.", 0.0, 4096, true);
-            out = parse(llm.complete(repair).content());
+            LlmClient.LlmResponse again = llm.complete(repair);
+            tokens(ctx, again);
+            out = parse(again.content());
         }
 
         int stored = 0;
@@ -200,6 +203,14 @@ public class ExtractStage implements PipelineStage {
             stored++;
         }
         return stored;
+    }
+
+    /** Token use per run, so the benchmark can report cost. Cached replays cost nothing and are not counted. */
+    static void tokens(PipelineContext ctx, LlmClient.LlmResponse r) {
+        if (!"cache".equals(r.source())) {
+            ctx.count("tokensIn", r.tokensIn());
+            ctx.count("tokensOut", r.tokensOut());
+        }
     }
 
     private Output parse(String content) {
