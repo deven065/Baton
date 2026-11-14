@@ -23,6 +23,7 @@ import com.bramhastra.baton.security.CurrentUser;
 import com.bramhastra.baton.security.CurrentUserProvider;
 import com.bramhastra.baton.source.connector.GitHubConnector;
 import com.bramhastra.baton.source.connector.GoogleDriveConnector;
+import com.bramhastra.baton.source.connector.JiraConnector;
 import com.bramhastra.baton.source.connector.SlackConnector;
 import com.bramhastra.baton.tenant.TenantContext;
 
@@ -35,15 +36,17 @@ public class IntegrationController {
     private final GitHubConnector github;
     private final SlackConnector slack;
     private final GoogleDriveConnector drive;
+    private final JiraConnector jira;
     private final CurrentUserProvider currentUser;
     private final RateLimiter limits;
 
     public IntegrationController(IntegrationService integrations, GitHubConnector github, SlackConnector slack,
-                                 GoogleDriveConnector drive, CurrentUserProvider currentUser, RateLimiter limits) {
+                                 GoogleDriveConnector drive, JiraConnector jira, CurrentUserProvider currentUser, RateLimiter limits) {
         this.integrations = integrations;
         this.github = github;
         this.slack = slack;
         this.drive = drive;
+        this.jira = jira;
         this.currentUser = currentUser;
         this.limits = limits;
     }
@@ -86,8 +89,9 @@ public class IntegrationController {
                 case SLACK -> "Connected to the Slack workspace " + slack.test(secret);
                 case GOOGLE_DRIVE -> {
                     drive.test(secret);
-                    yield "Google accepted the service account";
+                    yield "Google accepted the connection";
                 }
+                case JIRA -> "Signed in to Jira as " + jira.test(secret);
             };
             return Map.of("ok", true, "message", who);
         } catch (IllegalArgumentException e) {

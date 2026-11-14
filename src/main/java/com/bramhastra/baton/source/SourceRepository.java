@@ -86,10 +86,58 @@ public class SourceRepository {
     public void markReady(UUID id, int documents, int chunks, int redactions) {
         jdbc.sql("""
                 UPDATE source SET status = 'READY', document_count = :d, chunk_count = :c, redaction_count = :r,
-                                  last_synced_at = now(), last_error = NULL
+                                  last_synced_at = now(), last_checked_at = now(), last_error = NULL, sync_error = NULL
                 WHERE id = :id
                 """)
                 .param("id", id).param("d", documents).param("c", chunks).param("r", redactions).update();
+    }
+
+    /** After a read that changed something: remember the fingerprint and when it changed. */
+    public void markChanged(UUID id, String contentHash) {
+        jdbc.sql("UPDATE source SET content_hash = :h, last_changed_at = now() WHERE id = :id")
+                .param("id", id).param("h", contentHash).update();
+    }
+
+    /** A scheduled check that found nothing new (or the first fingerprint of an older source). */
+    public void markChecked(UUID id, String contentHash) {
+        jdbc.sql("""
+                UPDATE source SET status = 'READY', last_checked_at = now(), sync_error = NULL, last_error = NULL,
+                                  content_hash = COALESCE(:h, content_hash)
+                WHERE id = :id
+                """).param("id", id).param("h", contentHash).update();
+    }
+
+    /**
+     * A scheduled read failed (a revoked token, an outage). The source keeps its last good snapshot and stays READY
+     * so reconstruction still works; the error is shown beside it.
+     */
+    public void markSyncFailed(UUID id, String error) {
+        jdbc.sql("UPDATE source SET status = 'READY', last_checked_at = now(), sync_error = :e WHERE id = :id")
+                .param("id", id).param("e", error).update();
+    }
+
+    public void setAutoSync(UUID id, boolean on) {
+        jdbc.sql("UPDATE source SET auto_sync = :on WHERE id = :id").param("id", id).param("on", on).update();
+    }
+
+    /** Hash of each stored document's raw text, by external reference, for telling what changed. */
+    public Map<String, String> documentHashes(UUID sourceId) {
+        Map<String, String> out = new java.util.HashMap<>();
+        jdbc.sql("SELECT external_ref, content_hash FROM document WHERE source_id = :id")
+                .param("id", sourceId).query((rs, n) -> {
+                    out.put(rs.getString(1), rs.getString(2));
+                    return null;
+                }).list();
+        return out;
+    }
+
+    /** Live sources with automatic sync that have not been checked for {@code minutes}. */
+    public List<SourceRow> dueForAutoSync(int minutes, int limit) {
+        return jdbc.sql("""
+                SELECT * FROM source WHERE auto_sync AND status = 'READY' AND type IN ('GITHUB', 'SLACK', 'GOOGLE_DRIVE', 'JIRA')
+                  AND (last_checked_at IS NULL OR last_checked_at < now() - make_interval(mins => :m))
+                ORDER BY last_checked_at NULLS FIRST LIMIT :n
+                """).param("m", minutes).param("n", limit).query(this::mapSource).list();
     }
 
     public void markFailed(UUID id, String error) {
@@ -132,12 +180,12 @@ public class SourceRepository {
         jdbc.sql("DELETE FROM document WHERE source_id = :id").param("id", sourceId).update();
     }
 
-    public UUID insertDocument(SourceRow source, RawDocument doc, String redactedTitle) {
+    public UUID insertDocument(SourceRow source, RawDocument doc, String redactedTitle, String contentHash) {
         return jdbc.sql("""
                 INSERT INTO document (source_id, external_ref, title, author, authored_at, url, mime,
-                                      sensitivity, acl_groups)
+                                      sensitivity, acl_groups, content_hash)
                 VALUES (:sourceId, :ref, :title, :author, :authoredAt, :url, :mime, :sensitivity,
-                        CAST(:acl AS text[]))
+                        CAST(:acl AS text[]), :hash)
                 RETURNING id
                 """)
                 .param("sourceId", source.id())
@@ -149,6 +197,7 @@ public class SourceRepository {
                 .param("mime", truncate(doc.mime(), 100))
                 .param("sensitivity", source.sensitivity().level())
                 .param("acl", AccessPolicy.toPgArray(source.aclGroups()))
+                .param("hash", contentHash)
                 .query(UUID.class).single();
     }
 
@@ -218,7 +267,11 @@ public class SourceRepository {
                 rs.getInt("redaction_count"),
                 rs.getString("last_error"),
                 instant(rs.getTimestamp("last_synced_at")),
-                instant(rs.getTimestamp("created_at")));
+                instant(rs.getTimestamp("created_at")),
+                rs.getBoolean("auto_sync"),
+                instant(rs.getTimestamp("last_checked_at")),
+                instant(rs.getTimestamp("last_changed_at")),
+                rs.getString("sync_error"));
     }
 
     public static List<String> textArray(Array array) throws SQLException {

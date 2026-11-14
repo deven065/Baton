@@ -2,6 +2,7 @@ package com.bramhastra.baton.source;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -19,6 +20,8 @@ import com.bramhastra.baton.source.connector.RawDocument;
 import com.bramhastra.baton.source.connector.SourceConnector;
 import com.bramhastra.baton.source.connector.SourceConnector.FetchRequest;
 import com.bramhastra.baton.source.connector.SourceConnector.StagedFile;
+import com.bramhastra.baton.sync.ContentHash;
+import com.bramhastra.baton.sync.SyncService;
 
 /**
  * Flow A: fetch → redact → chunk → embed → store. Raw text exists only in memory inside this method;
@@ -37,10 +40,11 @@ public class IngestJobHandler implements JobHandler {
     private final CryptoService crypto;
     private final TransactionTemplate tx;
     private final AuditService audit;
+    private final SyncService sync;
 
     public IngestJobHandler(SourceRepository sources, List<SourceConnector> connectors, Redactor redactor,
                             Chunker chunker, Embedder embedder, CryptoService crypto, TransactionTemplate tx,
-                            AuditService audit) {
+                            AuditService audit, SyncService sync) {
         this.sources = sources;
         this.connectors = connectors;
         this.redactor = redactor;
@@ -49,6 +53,7 @@ public class IngestJobHandler implements JobHandler {
         this.crypto = crypto;
         this.tx = tx;
         this.audit = audit;
+        this.sync = sync;
     }
 
     @Override
@@ -61,15 +66,23 @@ public class IngestJobHandler implements JobHandler {
         UUID sourceId = job.payloadUuid("sourceId");
         SourceRow source = sources.findById(sourceId)
                 .orElseThrow(() -> new IllegalStateException("Source no longer exists"));
+        boolean scheduled = "true".equals(job.payloadString("scheduled"));
         try {
-            run(job, source, progress);
+            run(job, source, progress, scheduled);
         } catch (Exception e) {
-            sources.markFailed(sourceId, e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+            String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            if (scheduled) {
+                // A background read that fails must not take a good source out of reconstruction: keep the last
+                // snapshot, show the error beside it and tell the lead.
+                sync.onFailed(source, message);
+            } else {
+                sources.markFailed(sourceId, message);
+            }
             throw e;
         }
     }
 
-    private void run(Job job, SourceRow source, ProgressSink progress) throws Exception {
+    private void run(Job job, SourceRow source, ProgressSink progress, boolean scheduled) throws Exception {
         sources.setStatus(source.id(), SourceRow.SourceStatus.SYNCING);
         progress.report(new JobProgress("FETCH", 2, "Fetching " + source.title(), null));
 
@@ -89,6 +102,22 @@ public class IngestJobHandler implements JobHandler {
             throw new IllegalArgumentException("No readable text found in this source");
         }
 
+        // Fingerprints of the raw text (never stored otherwise): what changed since the last read?
+        Map<String, String> fresh = new LinkedHashMap<>();
+        for (RawDocument d : docs) {
+            fresh.put(refOf(d), ContentHash.of(d.text()));
+        }
+        Map<String, String> before = sources.documentHashes(source.id());
+        String sourceHash = ContentHash.combine(fresh);
+        boolean legacy = before.values().stream().anyMatch(h -> h == null); // read before fingerprints existed
+        if (scheduled && !before.isEmpty() && !legacy && sourceHash.equals(ContentHash.combine(before))) {
+            sources.markChecked(source.id(), sourceHash);
+            sync.onRecovered(source);
+            progress.report(new JobProgress("INDEX", 100, "No changes", Map.of("unchanged", 1)));
+            return;
+        }
+        SyncService.Change change = scheduled && !before.isEmpty() && !legacy ? diff(docs, fresh, before, source.id()) : null;
+
         // Re-sync replaces the previous snapshot of this source.
         sources.deleteDocuments(source.id());
 
@@ -103,7 +132,7 @@ public class IngestJobHandler implements JobHandler {
 
             int docChunks = pieces.size();
             tx.executeWithoutResult(status -> {
-                UUID documentId = sources.insertDocument(source, doc, title);
+                UUID documentId = sources.insertDocument(source, doc, title, fresh.get(refOf(doc)));
                 for (Redactor.Redaction r : redacted.redactions()) {
                     sources.insertRedactionToken(documentId, r,
                             crypto.encrypt(r.original().getBytes(StandardCharsets.UTF_8)));
@@ -125,11 +154,44 @@ public class IngestJobHandler implements JobHandler {
             sources.deleteStaged(source.id());
         }
         sources.markReady(source.id(), docs.size(), chunks, redactions);
+        sources.markChanged(source.id(), sourceHash);
+        if (change != null && change.total() > 0) {
+            sync.onChanged(source, change);
+        } else if (scheduled) {
+            sync.onRecovered(source);
+        }
         audit.record(job.createdBy(), "SOURCE_INGESTED", "source", source.id(), source.projectId(),
                 Map.of("documents", docs.size(), "chunks", chunks, "redactions", redactions,
                         "embeddings", embedder.available()));
         progress.report(new JobProgress("INDEX", 100, "Ready",
                 Map.of("documents", docs.size(), "chunks", chunks, "redactions", redactions)));
+    }
+
+    /** The key a document is known by across reads. */
+    static String refOf(RawDocument d) {
+        return d.externalRef() != null && !d.externalRef().isBlank() ? d.externalRef() : d.title();
+    }
+
+    private static SyncService.Change diff(List<RawDocument> docs, Map<String, String> fresh, Map<String, String> before,
+                                           UUID sourceId) {
+        int added = 0;
+        int changed = 0;
+        List<String> titles = new ArrayList<>();
+        for (RawDocument d : docs) {
+            String old = before.get(refOf(d));
+            if (old == null) {
+                added++;
+            } else if (!old.equals(fresh.get(refOf(d)))) {
+                changed++;
+            } else {
+                continue;
+            }
+            if (titles.size() < 3) {
+                titles.add(d.title().length() > 60 ? d.title().substring(0, 57) + "..." : d.title());
+            }
+        }
+        int removed = (int) before.keySet().stream().filter(ref -> !fresh.containsKey(ref)).count();
+        return new SyncService.Change(added, changed, removed, titles);
     }
 
     private List<float[]> embed(List<Chunker.Piece> pieces) {

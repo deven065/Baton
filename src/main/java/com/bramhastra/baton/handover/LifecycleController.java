@@ -38,15 +38,20 @@ public class LifecycleController {
     private final AskService ask;
     private final HandoverInsightService insight;
     private final ExportService exports;
+    private final HandoverAccess handoverAccess;
+    private final com.bramhastra.baton.sync.SyncService sync;
 
     public LifecycleController(ApprovalService approval, ShareService shares, CurrentUserProvider currentUser,
-                               AskService ask, HandoverInsightService insight, ExportService exports) {
+                               AskService ask, HandoverInsightService insight, ExportService exports,
+                               HandoverAccess handoverAccess, com.bramhastra.baton.sync.SyncService sync) {
         this.approval = approval;
         this.shares = shares;
         this.currentUser = currentUser;
         this.ask = ask;
         this.insight = insight;
         this.exports = exports;
+        this.handoverAccess = handoverAccess;
+        this.sync = sync;
     }
 
     // living handovers, progress, export (lead)
@@ -61,6 +66,21 @@ public class LifecycleController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void reopen(@PathVariable UUID id) {
         approval.reopen(currentUser.get(), id);
+        sync.dismissChangeNotices(id); // the lead has acted on the new evidence
+    }
+
+    /** New evidence from scheduled syncs, and sources that could not be read. Lead only. */
+    @GetMapping("/handovers/{id}/notices")
+    public java.util.List<com.bramhastra.baton.sync.SyncService.Notice> notices(@PathVariable UUID id) {
+        handoverAccess.requireLead(currentUser.get(), id);
+        return sync.notices(id);
+    }
+
+    @PostMapping("/handovers/{id}/notices/{noticeId}/dismiss")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void dismissNotice(@PathVariable UUID id, @PathVariable UUID noticeId) {
+        handoverAccess.requireLead(currentUser.get(), id);
+        sync.dismiss(id, noticeId);
     }
 
     @PostMapping("/handovers/{id}/shares/move-to-latest")

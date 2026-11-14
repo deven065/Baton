@@ -48,7 +48,7 @@ public class BatchPlanner {
         List<Candidate> all = jdbc.sql("""
                 SELECT k.id, k.text, k.sensitivity, k.acl_groups, d.title, d.author, d.authored_at, s.type
                 FROM chunk k JOIN document d ON d.id = k.document_id JOIN source s ON s.id = d.source_id
-                WHERE s.project_id = :p AND s.status = 'READY' AND s.type NOT IN ('TASK_CSV', 'TESTIMONY')
+                WHERE s.project_id = :p AND s.status = 'READY' AND s.type NOT IN ('TASK_CSV', 'JIRA', 'TESTIMONY')
                 """)
                 .param("p", projectId)
                 .query((rs, n) -> new Candidate(rs.getObject(1, UUID.class), rs.getString(2),

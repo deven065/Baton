@@ -10,7 +10,8 @@ import com.bramhastra.baton.common.Sensitivity;
 public record SourceRow(UUID id, UUID projectId, SourceType type, String title, Map<String, Object> config,
                         Sensitivity sensitivity, List<String> aclGroups, UUID attestedBy, SourceStatus status,
                         int documentCount, int chunkCount, int redactionCount, String lastError,
-                        Instant lastSyncedAt, Instant createdAt) {
+                        Instant lastSyncedAt, Instant createdAt, boolean autoSync, Instant lastCheckedAt,
+                        Instant lastChangedAt, String syncError) {
 
     public enum SourceStatus { PENDING, SYNCING, READY, FAILED }
 }

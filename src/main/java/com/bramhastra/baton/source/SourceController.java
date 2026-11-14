@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -84,6 +85,8 @@ public class SourceController {
                                 @RequestParam(required = false) String channel,
                                 @RequestParam(required = false) String folder,
                                 @RequestParam(required = false) String meetingDate,
+                                @RequestParam(required = false) String project,
+                                @RequestParam(required = false) Boolean autoSync,
                                 @RequestParam(required = false) MultipartFile file) throws IOException {
         CurrentUser me = currentUser.get();
         access.requireMember(me, projectId);
@@ -125,6 +128,8 @@ public class SourceController {
                     ? channel.strip().toLowerCase(java.util.Locale.ROOT) : channel.strip());
         } else if (type == SourceType.GOOGLE_DRIVE) {
             config.put("folder", folder == null ? "" : folder.strip());
+        } else if (type == SourceType.JIRA) {
+            config.put("project", project == null ? "" : project.strip());
         } else {
             if (file == null || file.isEmpty()) {
                 throw new ApiException(ErrorCode.VALIDATION_FAILED, "Request validation failed",
@@ -151,6 +156,9 @@ public class SourceController {
 
         billing.requireRoom(BillingService.Resource.SOURCES);
         UUID sourceId = sources.insert(projectId, type, title.strip(), config, sensitivity, groups, me.id());
+        if (type.isLive() && !Boolean.FALSE.equals(autoSync)) {
+            sources.setAutoSync(sourceId, true); // a live connection stays current unless the lead turns it off
+        }
         if (staged != null) {
             sources.stageFile(sourceId, staged, crypto.encrypt(staged.bytes()));
         }
@@ -179,7 +187,24 @@ public class SourceController {
         return sources.listDocuments(visible(sourceId).id());
     }
 
-    /** Re-sync a live source (GitHub, Slack, Google Drive). Uploaded files are re-synced by uploading again. */
+    /** Turns automatic sync of a live source on or off. Lead only. */
+    @org.springframework.web.bind.annotation.PatchMapping("/sources/{sourceId}")
+    public SourceView update(@PathVariable UUID sourceId, @RequestBody Map<String, Object> body) {
+        CurrentUser me = currentUser.get();
+        SourceRow s = visible(sourceId);
+        access.requireLead(me, s.projectId());
+        if (!s.type().isLive()) {
+            throw new ApiException(ErrorCode.INVALID_TRANSITION, "Only live sources (GitHub, Slack, Google Drive, Jira) can sync automatically");
+        }
+        if (!(body.get("autoSync") instanceof Boolean on)) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, "Request validation failed", Map.of("autoSync", "true or false"));
+        }
+        sources.setAutoSync(s.id(), on);
+        audit.record(me.id(), on ? "SOURCE_AUTO_SYNC_ON" : "SOURCE_AUTO_SYNC_OFF", "source", s.id(), s.projectId(), Map.of());
+        return SourceView.of(sources.findById(s.id()).orElseThrow());
+    }
+
+    /** Re-sync a live source (GitHub, Slack, Google Drive, Jira). Uploaded files are re-synced by uploading again. */
     @PostMapping("/sources/{sourceId}/sync")
     @ResponseStatus(HttpStatus.ACCEPTED)
     @Transactional
@@ -289,11 +314,13 @@ public class SourceController {
     public record SourceView(UUID id, UUID projectId, SourceType type, String title, Sensitivity sensitivity,
                              List<String> aclGroups, SourceRow.SourceStatus status, int documentCount,
                              int chunkCount, int redactionCount, String lastError, Instant lastSyncedAt,
-                             Instant createdAt, Map<String, Object> config) {
+                             Instant createdAt, Map<String, Object> config, boolean autoSync, Instant lastCheckedAt,
+                             Instant lastChangedAt, String syncError) {
         static SourceView of(SourceRow s) {
             return new SourceView(s.id(), s.projectId(), s.type(), s.title(), s.sensitivity(), s.aclGroups(),
                     s.status(), s.documentCount(), s.chunkCount(), s.redactionCount(), s.lastError(),
-                    s.lastSyncedAt(), s.createdAt(), s.config());
+                    s.lastSyncedAt(), s.createdAt(), s.config(), s.autoSync(), s.lastCheckedAt(), s.lastChangedAt(),
+                    s.syncError());
         }
     }
 }

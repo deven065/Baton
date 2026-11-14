@@ -6,7 +6,7 @@ import {
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { SensitivityChip } from '@/components/ui/badge';
-import { fmtDate, fmtDateTime, useGapList, useHandoverList, useRenameHandover, useShares, useSummary } from '@/data/live';
+import { fmtDate, fmtDateTime, useGapList, useHandoverList, useNotices, useRenameHandover, useShares, useSummary } from '@/data/live';
 import { useCurrentShare } from '@/pages/recipient/RecipientPages';
 import { Avatar, Kbd, Logo } from '@/components/ui/misc';
 import { NextStepLink } from '@/components/layout/guide';
@@ -261,9 +261,11 @@ function Notifications() {
   const h = session?.role === 'lead' ? session.handover : null;
   const { data: gaps = [] } = useGapList(h?.id);
   const { data: shares = [] } = useShares(h?.id);
+  const { data: notices = [] } = useNotices(h?.id);
   const [open, setOpen] = useState(false);
   const [seen, setSeen] = useState(() => { try { return Number(localStorage.getItem(SEEN_KEY) ?? 0); } catch { return 0; } });
   const items = [
+    ...notices.map(n => ({ at: n.updatedAt, text: n.message.length > 140 ? n.message.slice(0, 140) + '…' : n.message, to: n.kind === 'SYNC_FAILED' ? '/app/sources' : '/app' })),
     ...gaps.filter(g => g.answeredAt && g.status === 'ANSWERED').map(g => ({ at: g.answeredAt!, text: `${h?.departingName ?? 'The person leaving'} answered: ${g.question.length > 90 ? g.question.slice(0, 90) + '…' : g.question}`, to: '/app/review' })),
     ...shares.filter(s => s.acknowledgedAt).map(s => ({ at: s.acknowledgedAt!, text: `${s.recipientName} acknowledged handover v${s.versionNo}`, to: '/app/share' })),
     ...shares.filter(s => s.lastViewedAt && !s.acknowledgedAt).map(s => ({ at: s.lastViewedAt!, text: `${s.recipientName} opened handover v${s.versionNo}`, to: '/app/share' })),

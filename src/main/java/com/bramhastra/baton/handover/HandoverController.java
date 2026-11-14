@@ -54,11 +54,12 @@ public class HandoverController {
     private final AuditService audit;
     private final JdbcClient jdbc;
     private final ObjectMapper json;
+    private final com.bramhastra.baton.sync.SyncService sync;
 
     public HandoverController(HandoverRepository handovers, HandoverAccess handoverAccess, AccessPolicy access,
                               CurrentUserProvider currentUser, AppUserRepository users,
                               ProjectMemberRepository members, JobRepository jobs, AuditService audit,
-                              JdbcClient jdbc, ObjectMapper json) {
+                              JdbcClient jdbc, ObjectMapper json, com.bramhastra.baton.sync.SyncService sync) {
         this.handovers = handovers;
         this.handoverAccess = handoverAccess;
         this.access = access;
@@ -69,6 +70,7 @@ public class HandoverController {
         this.audit = audit;
         this.jdbc = jdbc;
         this.json = json;
+        this.sync = sync;
     }
 
     /** The lead starts a handover for a departing member. */
@@ -140,6 +142,7 @@ public class HandoverController {
         handovers.transition(h.id(), h.status(), next);
         UUID jobId = jobs.enqueue(JobKind.RECONSTRUCT, h.projectId(), me.id(), Map.of("handoverId", h.id().toString()));
         audit.record(me.id(), "RECONSTRUCT_REQUESTED", "handover", h.id(), h.projectId(), Map.of("jobId", jobId.toString()));
+        sync.dismissChangeNotices(h.id()); // reconstructing is the answer to "new evidence"
         return new ReconstructStarted(h.id(), jobId);
     }
 

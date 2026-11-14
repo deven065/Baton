@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Download, FileCheck2, GitCommitHorizontal, GitCompare, Lock, Users } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { EvidenceNotices } from '@/components/layout/notices';
 import { SensitivityChip, StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/form';
@@ -47,6 +48,7 @@ export function Approval() {
     <>
       <WorkflowStepper current={3} />
       <PageHeader title="Approval gate" sub="Approving freezes a version with a SHA-256 hash. Recipients only ever see approved versions." />
+      <EvidenceNotices handoverId={handover.id} />
       <DriftBanner
         versionNo={drift.data?.versionNo ?? null}
         status={drift.data?.status}

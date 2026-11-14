@@ -6,14 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Checkbox, Field, Input, Segmented } from '@/components/ui/form';
 import { Banner, Card, CardHeader, IconTile, PageHeader, Progress, QueryState, WorkflowStepper } from '@/components/ui/misc';
 import { playMoment } from '@/components/ui/recording';
-import { SOURCE_TYPE_LABEL, fmtDateTime, sens, useCreateSource, useDeleteRecording, useSourceList, useSyncSource, type SensitivityDto, type SourceDto, type SourceTypeDto, useIntegrations, type IntegrationKind,
+import { SOURCE_TYPE_LABEL, fmtDateTime, sens, useCreateSource, useDeleteRecording, useSetAutoSync, useSourceList, useSyncSource, type SensitivityDto, type SourceDto, type SourceTypeDto, useIntegrations, type IntegrationKind,
 } from '@/data/live';
 import type { Status } from '@/data/types';
 import { useSession } from '@/lib/auth';
 import { ApiError } from '@/lib/http';
 
 const KIND_ICON: Record<SourceTypeDto, LucideIcon> = {
-  GITHUB: GitBranch, SLACK: MessagesSquare, GOOGLE_DRIVE: FolderOpen, TASK_CSV: KanbanSquare, DOCUMENT: FileText, MEETING_NOTES: NotebookPen, MEETING_RECORDING: AudioLines, CHAT_EXPORT: Hash, TESTIMONY: MessageSquareQuote,
+  GITHUB: GitBranch, SLACK: MessagesSquare, GOOGLE_DRIVE: FolderOpen, TASK_CSV: KanbanSquare, DOCUMENT: FileText, JIRA: KanbanSquare, MEETING_NOTES: NotebookPen, MEETING_RECORDING: AudioLines, CHAT_EXPORT: Hash, TESTIMONY: MessageSquareQuote,
 };
 const STATE: Record<SourceDto['status'], { s: Status; l: string }> = {
   PENDING: { s: 'stale', l: 'Queued' }, SYNCING: { s: 'single', l: 'Syncing…' }, READY: { s: 'verified', l: 'Ready' }, FAILED: { s: 'conflicting', l: 'Failed' },
@@ -41,10 +41,11 @@ function SourceRow({ s, onSync, syncing }: { s: SourceDto; onSync?: () => void; 
           <span className="text-caption text-ink-500">{s.redactionCount} redacted{s.lastSyncedAt ? ` · ${fmtDateTime(s.lastSyncedAt)}` : ''}</span>
         </div>
         {s.type === 'MEETING_RECORDING' && <RecordingActions s={s} />}
-        {(s.type === 'GITHUB' || s.type === 'SLACK' || s.type === 'GOOGLE_DRIVE') && onSync && (
+        {LIVE_TYPES.includes(s.type) && onSync && (
           <button type="button" aria-label={`Re-sync ${s.title}`} disabled={syncing} onClick={onSync} className="rounded p-1 text-ink-400 hover:text-ink-900 cursor-pointer disabled:opacity-40"><RefreshCw className="size-[18px]" /></button>
         )}
       </div>
+      {LIVE_TYPES.includes(s.type) && s.status !== 'PENDING' && <AutoSyncLine s={s} />}
       <div className="flex flex-wrap items-center gap-2 sm:pl-[54px]">
         <span className="text-caption text-ink-400">Sensitivity</span>
         <SensitivityChip level={sens(s.sensitivity)} />
@@ -53,6 +54,34 @@ function SourceRow({ s, onSync, syncing }: { s: SourceDto; onSync?: () => void; 
         {s.aclGroups.length ? s.aclGroups.map(g => <Chip key={g}>{g}</Chip>) : <span className="text-caption text-ink-500">everyone in the project</span>}
       </div>
     </Card>
+  );
+}
+
+const LIVE_TYPES: SourceTypeDto[] = ['GITHUB', 'SLACK', 'GOOGLE_DRIVE', 'JIRA'];
+
+const ago = (iso: string | null) => {
+  if (!iso) return 'never';
+  const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
+};
+
+/** A live source's background sync: when it last looked, when it last found something, and the switch (lead). */
+function AutoSyncLine({ s }: { s: SourceDto }) {
+  const { project, user } = useSession();
+  const set = useSetAutoSync(project?.id);
+  const lead = user.appRole === 'lead';
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:pl-[54px]">
+      <RefreshCw className={`size-3.5 ${s.autoSync ? 'text-verified' : 'text-ink-400'}`} aria-hidden />
+      <span className="text-caption text-ink-700">
+        {s.autoSync ? <>Updates itself every hour · checked {ago(s.lastCheckedAt)}{s.lastChangedAt ? ` · last new evidence ${ago(s.lastChangedAt)}` : ''}</> : 'Automatic updates are off'}
+      </span>
+      {lead && (
+        <button type="button" disabled={set.isPending} onClick={() => set.mutate({ id: s.id, autoSync: !s.autoSync })}
+          className="text-caption font-medium text-brand-700 hover:underline cursor-pointer disabled:opacity-50">{s.autoSync ? 'Turn off' : 'Turn on'}</button>
+      )}
+      {s.syncError && <span className="w-full text-caption text-conflict">The last background read failed: {s.syncError}. The earlier snapshot is still used.</span>}
+    </div>
   );
 }
 
@@ -139,10 +168,12 @@ const TYPES: { id: SourceTypeDto; label: string; accept?: string }[] = [
   { id: 'GITHUB', label: 'GitHub repository (live)' },
   { id: 'SLACK', label: 'Slack channel (live)' },
   { id: 'GOOGLE_DRIVE', label: 'Google Drive folder (live)' },
+  { id: 'JIRA', label: 'Jira project (live)' },
 ];
 const LIVE: Partial<Record<SourceTypeDto, { kind: IntegrationKind; field: string; placeholder: string; help: string; needs: boolean }>> = {
   GITHUB: { kind: 'GITHUB', field: 'Repository (owner/name)', placeholder: 'northfield-club/annapurna', help: 'Public repositories work without a connection; private ones need a GitHub token.', needs: false },
   SLACK: { kind: 'SLACK', field: 'Channel', placeholder: '#dev', help: 'The last 90 days of the channel. Add your Slack app to the channel first (/invite @app).', needs: true },
+  JIRA: { kind: 'JIRA', field: 'Project key', placeholder: 'ANN', help: 'The most recently updated 500 issues of the project. Open issues owned by the person leaving, or by nobody, become handover items.', needs: true },
   GOOGLE_DRIVE: { kind: 'GOOGLE_DRIVE', field: 'Folder link', placeholder: 'https://drive.google.com/drive/folders/…', help: 'Google Docs and text files in the folder. Share the folder with your service account as Viewer.', needs: true },
 };
 const LEVELS = ['Public', 'Internal', 'Confidential', 'Restricted'] as const;
@@ -155,6 +186,7 @@ function AddSourceModal({ onClose }: { onClose: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [repo, setRepo] = useState('');
   const [meetingDate, setMeetingDate] = useState('');
+  const [autoSync, setAutoSync] = useState(true);
   const { data: integrations = [] } = useIntegrations();
   const [level, setLevel] = useState<(typeof LEVELS)[number]>('Internal');
   const [groups, setGroups] = useState<string[]>([]);
@@ -184,7 +216,8 @@ function AddSourceModal({ onClose }: { onClose: () => void }) {
     create.mutate(
       { type, title: title.trim(), sensitivity: level.toUpperCase() as SensitivityDto, aclGroups: groups, file: file ?? undefined, repo: type === 'GITHUB' ? repo.trim() || undefined : undefined,
         channel: type === 'SLACK' ? repo.trim() : undefined, folder: type === 'GOOGLE_DRIVE' ? repo.trim() : undefined,
-        meetingDate: type === 'MEETING_RECORDING' && meetingDate ? meetingDate : undefined },
+        meetingDate: type === 'MEETING_RECORDING' && meetingDate ? meetingDate : undefined,
+        project: type === 'JIRA' ? repo.trim() : undefined, autoSync: live ? autoSync : undefined },
       { onSuccess: onClose },
     );
   };
@@ -221,6 +254,7 @@ function AddSourceModal({ onClose }: { onClose: () => void }) {
               <>
                 {blocked && <Banner tone="inferred" icon={AlertTriangle}>{SOURCE_TYPE_LABEL[type]} isn’t connected for this workspace yet. An admin connects it under <strong>Organisation → Connections</strong>.</Banner>}
                 <Field label={live.field} hint={<p className="text-caption text-ink-500">{live.help}{type === 'GITHUB' && (connected ? ' A token is connected.' : '')}</p>}>{id => <Input id={id} value={repo} onChange={e => setRepo(e.target.value)} placeholder={live.placeholder} disabled={blocked} autoCapitalize="none" spellCheck={false} />}</Field>
+                <Checkbox checked={autoSync} onChange={setAutoSync} label={<><span className="block font-medium text-ink-900">Keep this up to date automatically</span><span className="mt-1 block text-caption text-ink-500">Baton reads it again every hour. If something new appears you are told, and a handover still in review is reconstructed again.</span></>} />
               </>
             ) : (
               <>

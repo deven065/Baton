@@ -378,6 +378,7 @@ Baton works without any AI. AI only proposes claims; code does the rest.
 | `GITHUB` (live) | `owner/name` and optional branch | README, Markdown docs (40), issues and pull requests with comments (200), recent commits |
 | `SLACK` (live) | Channel name like `#dev`, or its id | The last 90 days (up to 1,000 messages, 30 threads), real names, one document per day |
 | `GOOGLE_DRIVE` (live) | Folder link or id | Google Docs and text files (up to 50, 1 MB each) |
+| `JIRA` (live) | Project key such as `ANN` | The 500 most recently updated issues, one document each in the task-board shape, so open issues owned by the person leaving (or by nobody) become handover items |
 | `TESTIMONY` | Created by exit-interview answers | Answers |
 
 Uploads are limited to 25 MB, kept encrypted only until the ingest job finishes, then deleted (except a recording's
@@ -400,19 +401,61 @@ audio, below). Live sources can be synced again from the Sources page.
   transcript and every quote (`RECORDING_DELETED`).
 - A demo call (72 seconds, two voices) and its transcript are in `demo/recordings/`.
 
-**Connecting tools** (Organisation → Connections, admins only; credentials encrypted in the company's database):
+**Connecting tools** (Organisation → Connections, admins only; credentials encrypted in the company's database).
+Each tool can be connected two ways:
 
-- **GitHub**: a fine-grained personal access token with read-only Contents, Issues, Pull requests and Metadata on the
-  chosen repositories. Public repositories work without one.
-- **Slack**: create an app at api.slack.com/apps, add bot scopes `channels:history`, `channels:read`,
-  `groups:history`, `groups:read`, `users:read`, install it, paste the **Bot User OAuth Token** (`xoxb-…`), and
-  `/invite` the app to each channel.
-- **Google Drive**: create a service account in a Google Cloud project with the Drive API enabled, add a JSON key,
-  paste the whole file, and share each folder with the service account's email as **Viewer**.
+- **One click** ("Add to Slack", "Connect with GitHub", "Connect with Google"): the admin approves read-only access on
+  the tool's own page and is sent back. No key to copy. It appears only when the server's operator has registered an
+  app with that tool (see *One-click connections* below); otherwise the page shows the paste-a-key form.
+- **Paste a key**:
+  - **GitHub**: a fine-grained personal access token with read-only Contents, Issues, Pull requests and Metadata on
+    the chosen repositories. Public repositories work without one.
+  - **Slack**: create an app at api.slack.com/apps, add bot scopes `channels:history`, `channels:read`,
+    `groups:history`, `groups:read`, `users:read`, install it, paste the **Bot User OAuth Token** (`xoxb-…`), and
+    `/invite` the app to each channel.
+  - **Google Drive**: create a service account in a Google Cloud project with the Drive API enabled, add a JSON key,
+    paste the whole file, and share each folder with the service account's email as **Viewer**.
+  - **Jira** (paste only): your Jira Cloud site address, the account email and an Atlassian API token from
+    id.atlassian.com → Security → API tokens. It can read whatever that account can read, so use a read-only account.
 
 Each connection has **Test** (checks the credential without reading data) and **Disconnect**.
 
-**Trust tiers** used in scoring: systems of record (GitHub, task boards) > documents, meeting notes, Drive, testimony
+**One-click connections.** The operator registers one app per tool and sets its client id and secret on the server
+(variables below). The flow is the standard OAuth authorization-code flow: `POST /api/admin/integrations/{kind}/oauth/start`
+returns the tool's authorization page with a signed `state` (workspace, admin, tool, ten-minute expiry, signed with a key
+derived from the JWT secret; deliberately not a JWT, so it can never be used as a bearer token); the tool redirects the
+browser to `GET /api/oauth/{slack|github|google_drive}/callback`, which has no sign-in header, trusts only that state,
+trades the code for a token inside the right workspace and stores it encrypted exactly like a pasted one (audited as
+`INTEGRATION_CONNECTED` with `how: oauth`), then sends the browser to Organisation → Connections.
+
+| Tool | Registered as | Scopes | Redirect address to register |
+|---|---|---|---|
+| Slack | A Slack app (OAuth & Permissions) | `channels:history channels:read groups:history groups:read users:read` (a read-only bot token) | `{API_PUBLIC_URL}/api/oauth/slack/callback` |
+| GitHub | A **GitHub App** (read-only Contents, Issues, Pull requests) with *Expire user authorization tokens* off, so the token cannot write. An OAuth App with scope `repo` also works but can write | set by the app | `{API_PUBLIC_URL}/api/oauth/github/callback` |
+| Google | A Google Cloud OAuth client (Web application) | `drive.readonly email`, offline access (a refresh token is kept and exchanged for short-lived access tokens when syncing) | `{API_PUBLIC_URL}/api/oauth/google_drive/callback` |
+
+**Automatic sync.** Live sources (GitHub, Slack, Google Drive, Jira) are read again in the background so handovers stay
+current. It is on by default for a new live source and the lead can turn it off per source.
+
+- Every `SYNC_TICK_MINUTES` (30) the scheduler asks each workspace which sources are due, and any source last checked
+  more than `SYNC_INTERVAL_MINUTES` (60) ago is read by the ordinary ingest job in *scheduled* mode. The tick is slow on
+  purpose: a company's database is often serverless and billed while awake.
+- **Incremental.** Each read is fingerprinted (SHA-256 of every document's raw text, which is never stored otherwise).
+  If nothing changed, nothing is re-indexed: no new rows, no embeddings, no change time. Only a change re-indexes the
+  source and counts as a re-sync for drift.
+- **A change** raises a *new evidence* notice for the lead of each handover in the project (one open notice per handover,
+  refreshed in place), an email when email is on, a bell entry, and an audit event `SOURCE_CHANGE_DETECTED` with no actor.
+  A handover **in review** that has been reconstructed before is reconstructed again by itself (claims already reviewed
+  are kept). An **approved or shared** handover is left alone: its recipients keep the frozen version, and the lead is
+  offered **Start version N+1**.
+- **A failed read** (a revoked token, an outage) never takes a good source out of reconstruction: it keeps its last
+  snapshot and stays ready, the error is shown beside it, and the lead gets one *could not be read* notice that clears
+  when a read works again.
+- Starting the next version or reconstructing answers the notice; the lead can also dismiss it.
+- **Hosting note:** the schedule runs inside the API process. On a free host that sleeps when idle the sync only runs
+  while the API is awake; an uptime monitor pinging `/actuator/health` every few minutes keeps it running.
+
+**Trust tiers** used in scoring: systems of record (GitHub, Jira, task boards) > documents, meeting notes, Drive, testimony
 > chat (exports and Slack).
 
 ---
@@ -525,6 +568,17 @@ All settings are environment variables (defaults in `src/main/resources/applicat
 | `LOGIN_FAILURES_PER_ACCOUNT` | 8 per 15 minutes |
 | `SIGNUP_PER_IP` | 5 per hour |
 | `LOOKUP_PER_IP` | 60 per minute |
+
+**Automatic sync and one-click connections**
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SYNC_ENABLED` | true | Switches the background sync on or off |
+| `SYNC_TICK_MINUTES`, `SYNC_INTERVAL_MINUTES` | 30, 60 | How often workspaces are asked, and how old a source must be to be read again |
+| `API_PUBLIC_URL` | empty | This API's public address, for the redirect addresses above. One-click connection is off without it |
+| `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` | empty | The Slack app's credentials |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | empty | The GitHub App's (or OAuth App's) credentials |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | empty | The Google OAuth client's credentials |
 
 **Email**
 
@@ -731,7 +785,7 @@ decides each person's role. The Figma plugin that draws the product design (file
 ## 19. Testing
 
 ```bash
-./mvnw test          # 115 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
+./mvnw test          # 130 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
 cd frontend && npx tsc -b --noEmit && npm run build
 ```
 
@@ -784,7 +838,7 @@ dashboard", "renewal is due on 2026-12-01"); a model is expected to find them.
 | Reconstruction and review | `OfflineExtractorTest`, `ReconstructApiTest`, `ReviewApiTest`, `ConflictDecisionTest` (a conflict decision survives re-runs) |
 | Workspaces and admin | `WorkspaceApiTest`, `DatabaseUrlTest`, `CompanyAdminApiTest`, `HardeningApiTest`, `SafeLogTest` |
 | Handover lifecycle | `HandoverStateMachineTest`, `LifecycleApiTest`, `HandoverFeaturesApiTest` |
-| AI, connectors, billing | `AiSettingsApiTest`, `ConnectorsAndBillingApiTest` (fake AI, Slack, Google and Razorpay servers) |
+| AI, connectors, billing | `AiSettingsApiTest`, `ConnectorsAndBillingApiTest` (fake AI, Slack, Google and Razorpay servers), `OAuthApiTest` (one-click connections against fake Slack, GitHub and Google: forged, expired and wrong-tool states refused), `AutoSyncApiTest` (fake Jira: first read, unchanged check, new evidence, approved handover left alone, failing read, switch off) |
 | Evaluation | `PlantedFactsEvaluationTest` (25 planted facts, secrets, injection, restricted facts), `ModelCheckTest` (disputed claims stop being shown as fact and block approval) |
 | Deployment safety | `DemoGuardTest` (shared demo cannot be vandalised), `SecretsCheckTest` |
 

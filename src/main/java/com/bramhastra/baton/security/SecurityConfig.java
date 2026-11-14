@@ -57,6 +57,8 @@ public class SecurityConfig {
                         // Workspace sign-up and the sign-in page's "does this workspace exist" lookup.
                         .requestMatchers(HttpMethod.POST, "/api/workspaces").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/workspaces/*").permitAll()
+                        // A tool sends the browser back here after "Connect with …"; authenticated by the signed state.
+                        .requestMatchers(HttpMethod.GET, "/api/oauth/*/callback").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated())

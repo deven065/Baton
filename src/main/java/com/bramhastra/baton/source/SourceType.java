@@ -1,11 +1,11 @@
 package com.bramhastra.baton.source;
 
 public enum SourceType {
-    GITHUB, SLACK, GOOGLE_DRIVE, TASK_CSV, DOCUMENT, MEETING_NOTES, MEETING_RECORDING, CHAT_EXPORT, TESTIMONY;
+    GITHUB, SLACK, GOOGLE_DRIVE, JIRA, TASK_CSV, DOCUMENT, MEETING_NOTES, MEETING_RECORDING, CHAT_EXPORT, TESTIMONY;
 
     /** Read live from a tool with the workspace's own credentials; can be synced again. */
     public boolean isLive() {
-        return this == GITHUB || this == SLACK || this == GOOGLE_DRIVE;
+        return this == GITHUB || this == SLACK || this == GOOGLE_DRIVE || this == JIRA;
     }
 
     public boolean isUpload() {

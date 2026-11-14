@@ -27,7 +27,7 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class IntegrationService {
 
-    public enum Kind { GITHUB, SLACK, GOOGLE_DRIVE }
+    public enum Kind { GITHUB, SLACK, GOOGLE_DRIVE, JIRA }
 
     public record View(Kind kind, boolean connected, String hint, Instant updatedAt, String updatedByName) {
     }
@@ -88,6 +88,23 @@ public class IntegrationService {
                 }
                 return "bot token ending " + s.substring(s.length() - 4);
             }
+            case JIRA -> {
+                try {
+                    JsonNode c = json.readTree(s);
+                    String site = c.path("site").asString("").strip();
+                    String email = c.path("email").asString("").strip();
+                    if (!site.startsWith("https://") && !site.startsWith("http://") || email.isEmpty() || !email.contains("@")
+                            || c.path("token").asString("").isBlank()) {
+                        throw invalid("Enter the Jira site address, your account email and an API token");
+                    }
+                    String host = java.net.URI.create(site).getHost();
+                    return email + " at " + (host == null ? site : host);
+                } catch (ApiException e) {
+                    throw e;
+                } catch (RuntimeException e) {
+                    throw invalid("Enter the Jira site address, your account email and an API token");
+                }
+            }
             case GOOGLE_DRIVE -> {
                 try {
                     JsonNode key = json.readTree(s);
@@ -109,7 +126,20 @@ public class IntegrationService {
 
     @Transactional
     public View save(UUID actor, Kind kind, String secret) {
-        String hint = hintFor(kind, secret);
+        return store(actor, kind, secret, hintFor(kind, secret), "paste");
+    }
+
+    /** A connection made with one click (OAuth): the secret came from the provider, not from a pasted form. */
+    @Transactional
+    public View saveOAuth(UUID actor, Kind kind, String secret, String hint) {
+        if (secret == null || secret.isBlank() || secret.length() > 4000) {
+            throw invalid("The provider did not return a usable token");
+        }
+        String h = hint == null || hint.isBlank() ? "signed in with one click" : hint;
+        return store(actor, kind, secret.strip(), h.length() > 110 ? h.substring(0, 110) : h, "oauth");
+    }
+
+    private View store(UUID actor, Kind kind, String secret, String hint, String how) {
         CryptoService.Sealed sealed = crypto.encrypt(secret.strip().getBytes(StandardCharsets.UTF_8));
         jdbc.sql("""
                 INSERT INTO integration (kind, secret_ciphertext, secret_iv, hint, updated_by, updated_at)
@@ -117,7 +147,7 @@ public class IntegrationService {
                 ON CONFLICT (kind) DO UPDATE SET secret_ciphertext = :c, secret_iv = :iv, hint = :h, updated_by = :by, updated_at = now()
                 """).param("k", kind.name()).param("c", sealed.ciphertext()).param("iv", sealed.iv()).param("h", hint)
                 .param("by", actor).update();
-        audit.record(actor, "INTEGRATION_CONNECTED", "integration", null, null, Map.of("kind", kind.name()));
+        audit.record(actor, "INTEGRATION_CONNECTED", "integration", null, null, Map.of("kind", kind.name(), "how", how));
         return list().stream().filter(v -> v.kind() == kind).findFirst().orElseThrow();
     }
 
@@ -133,6 +163,7 @@ public class IntegrationService {
             case GITHUB -> "GitHub";
             case SLACK -> "Slack";
             case GOOGLE_DRIVE -> "Google Drive";
+            case JIRA -> "Jira";
         };
     }
 

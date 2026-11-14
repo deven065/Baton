@@ -2,6 +2,7 @@ import { AlertTriangle, Info, KeyRound, MessageCircle, Plug, type LucideIcon } f
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { NextStepGuide } from '@/components/layout/guide';
+import { EvidenceNotices } from '@/components/layout/notices';
 import { StartHandoverModal } from './StartHandover';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -56,6 +57,7 @@ export default function Dashboard() {
         right={<><Link to="/app/sources"><Button>Add a source</Button></Link><Button kind="primary" onClick={() => setStarting(true)}>Start a handover</Button></>}
       />
       {starting && <StartHandoverModal onClose={() => setStarting(false)} />}
+      <EvidenceNotices handoverId={handover?.id} />
       <NextStepGuide onStart={() => setStarting(true)} />
       <div className="reveal-list grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Claims" value={String(summary?.total ?? '–')} note={summary ? `${summary.byStatus.VERIFIED ?? 0} verified · ${summary.byStatus.SINGLE_SOURCE ?? 0} single source` : 'No handover yet'} />

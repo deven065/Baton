@@ -58,7 +58,7 @@ public class SignalStage implements PipelineStage {
                 SELECT k.id, k.text, k.sensitivity, k.acl_groups, s.type, d.external_ref, d.url
                 FROM chunk k JOIN document d ON d.id = k.document_id JOIN source s ON s.id = d.source_id
                 WHERE s.project_id = :p AND s.status = 'READY' AND k.seq = 0
-                  AND (s.type = 'TASK_CSV' OR (s.type = 'GITHUB' AND (d.external_ref LIKE 'pr/%' OR d.external_ref LIKE 'issue/%')))
+                  AND (s.type IN ('TASK_CSV', 'JIRA') OR (s.type = 'GITHUB' AND (d.external_ref LIKE 'pr/%' OR d.external_ref LIKE 'issue/%')))
                 """)
                 .param("p", ctx.handover().projectId())
                 .query((rs, n) -> new Row(rs.getObject(1, UUID.class), rs.getString(2),
@@ -69,7 +69,7 @@ public class SignalStage implements PipelineStage {
         int found = 0;
         for (Row row : rows) {
             Map<String, String> fields = fields(row.text());
-            if (row.sourceType().equals("TASK_CSV")) {
+            if (row.sourceType().equals("TASK_CSV") || row.sourceType().equals("JIRA")) {
                 found += task(ctx, row, fields);
             } else {
                 found += gitHub(ctx, row, fields);

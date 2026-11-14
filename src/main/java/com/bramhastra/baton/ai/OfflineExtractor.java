@@ -89,7 +89,7 @@ public class OfflineExtractor {
             String attrs = m.group(2);
             String body = m.group(3);
             Matcher src = ATTR_SOURCE.matcher(attrs);
-            if (src.find() && src.group(1).equals("TASK_CSV")) {
+            if (src.find() && (src.group(1).equals("TASK_CSV") || src.group(1).equals("JIRA"))) {
                 continue; // task rows are handled by repository signals, without AI
             }
             Matcher d = ATTR_DATE.matcher(attrs);

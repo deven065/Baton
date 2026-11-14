@@ -50,8 +50,10 @@ public class GoogleDriveConnector implements SourceConnector {
     private final String tokenUrl;
     private final ObjectMapper json;
     private final IntegrationService integrations;
+    private final com.bramhastra.baton.integration.OAuthService oauthFlow;
 
     public GoogleDriveConnector(ObjectMapper json, IntegrationService integrations,
+                                com.bramhastra.baton.integration.OAuthService oauthFlow,
                                 @Value("${baton.google.drive-url:https://www.googleapis.com/drive/v3}") String driveUrl,
                                 @Value("${baton.google.token-url:https://oauth2.googleapis.com/token}") String tokenUrl) {
         this.drive = RestClient.create();
@@ -60,6 +62,7 @@ public class GoogleDriveConnector implements SourceConnector {
         this.tokenUrl = tokenUrl;
         this.json = json;
         this.integrations = integrations;
+        this.oauthFlow = oauthFlow;
     }
 
     @Override
@@ -102,7 +105,7 @@ public class GoogleDriveConnector implements SourceConnector {
                     + "&pageSize=200&orderBy=modifiedTime%20desc&supportsAllDrives=true&includeItemsFromAllDrives=true"
                     + "&fields=" + enc("files(id,name,mimeType,size,modifiedTime,webViewLink,lastModifyingUser(displayName))"));
         } catch (HttpClientErrorException.NotFound e) {
-            throw new IllegalArgumentException("Drive cannot find that folder. Share it with the service account as Viewer");
+            throw new IllegalArgumentException("Drive cannot find that folder. Open it with the connected Google account, or share it with that account as Viewer");
         }
         List<RawDocument> docs = new ArrayList<>();
         int skipped = 0;
@@ -143,6 +146,10 @@ public class GoogleDriveConnector implements SourceConnector {
     private String accessToken(String serviceAccountJson) {
         try {
             JsonNode key = json.readTree(serviceAccountJson);
+            if ("oauth".equals(key.path("type").asString(""))) {
+                // Connected with one click: trade the stored refresh token for a short-lived access token.
+                return oauthFlow.refreshGoogle(key.path("refresh_token").asString(""));
+            }
             long now = Instant.now().getEpochSecond();
             Base64.Encoder b64 = Base64.getUrlEncoder().withoutPadding();
             String header = b64.encodeToString("{\"alg\":\"RS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));

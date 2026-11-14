@@ -8,7 +8,7 @@ export type SensitivityDto = 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'RESTRICTE
 export type ClaimStatusDto = 'VERIFIED' | 'SINGLE_SOURCE' | 'INFERRED' | 'CONFLICTING' | 'MISSING_EVIDENCE' | 'STALE';
 export type ReviewStateDto = 'PENDING' | 'ACCEPTED' | 'EDITED' | 'REJECTED' | 'NEEDS_INFO';
 export type HandoverStatusDto = 'DRAFT' | 'RECONSTRUCTING' | 'IN_REVIEW' | 'APPROVED' | 'SHARED' | 'ARCHIVED';
-export type SourceTypeDto = 'GITHUB' | 'SLACK' | 'GOOGLE_DRIVE' | 'TASK_CSV' | 'DOCUMENT' | 'MEETING_NOTES' | 'MEETING_RECORDING' | 'CHAT_EXPORT' | 'TESTIMONY';
+export type SourceTypeDto = 'GITHUB' | 'SLACK' | 'GOOGLE_DRIVE' | 'JIRA' | 'TASK_CSV' | 'DOCUMENT' | 'MEETING_NOTES' | 'MEETING_RECORDING' | 'CHAT_EXPORT' | 'TESTIMONY';
 
 export interface UserDto {
   id: string; email: string; displayName: string; orgRole: 'ADMIN' | 'MEMBER'; clearance: SensitivityDto; groups: string[];
@@ -27,6 +27,8 @@ export interface SourceDto {
   id: string; type: SourceTypeDto; title: string; sensitivity: SensitivityDto; aclGroups: string[];
   status: 'PENDING' | 'SYNCING' | 'READY' | 'FAILED'; documentCount: number; chunkCount: number; redactionCount: number;
   lastError: string | null; lastSyncedAt: string | null; createdAt: string; config: Record<string, unknown>;
+  /** Live sources: read again in the background, when it last looked, when it last found something new, why a read failed. */
+  autoSync: boolean; lastCheckedAt: string | null; lastChangedAt: string | null; syncError: string | null;
 }
 export interface EvidenceDto {
   id: string; chunkId: string; quote: string; matchScore: number; start: number | null; end: number | null;
@@ -71,7 +73,7 @@ export const CLAIM_TYPE_LABEL: Record<string, string> = {
 };
 export const typeLabel = (t: string) => CLAIM_TYPE_LABEL[t] ?? t;
 export const SOURCE_TYPE_LABEL: Record<SourceTypeDto, string> = {
-  GITHUB: 'GitHub', SLACK: 'Slack', GOOGLE_DRIVE: 'Google Drive', TASK_CSV: 'Task board', DOCUMENT: 'Document', MEETING_NOTES: 'Meeting notes', MEETING_RECORDING: 'Meeting recording', CHAT_EXPORT: 'Chat export', TESTIMONY: 'Testimony',
+  GITHUB: 'GitHub', SLACK: 'Slack', GOOGLE_DRIVE: 'Google Drive', JIRA: 'Jira', TASK_CSV: 'Task board', DOCUMENT: 'Document', MEETING_NOTES: 'Meeting notes', MEETING_RECORDING: 'Meeting recording', CHAT_EXPORT: 'Chat export', TESTIMONY: 'Testimony',
 };
 /** Recipient-facing wording for an evidence status. */
 export const STATUS_LABEL: Record<ClaimStatusDto, string> = {
@@ -194,7 +196,7 @@ export function useDeleteRecording(projectId?: string | null) {
 export function useCreateSource(projectId?: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: { type: SourceTypeDto; title: string; sensitivity: SensitivityDto; aclGroups: string[]; file?: File; repo?: string; branch?: string; channel?: string; folder?: string; meetingDate?: string }) => {
+    mutationFn: (p: { type: SourceTypeDto; title: string; sensitivity: SensitivityDto; aclGroups: string[]; file?: File; repo?: string; branch?: string; channel?: string; folder?: string; meetingDate?: string; project?: string; autoSync?: boolean }) => {
       const f = new FormData();
       f.set('type', p.type);
       f.set('title', p.title);
@@ -207,6 +209,8 @@ export function useCreateSource(projectId?: string | null) {
       if (p.channel) f.set('channel', p.channel);
       if (p.folder) f.set('folder', p.folder);
       if (p.meetingDate) f.set('meetingDate', p.meetingDate);
+      if (p.project) f.set('project', p.project);
+      if (p.autoSync === false) f.set('autoSync', 'false');
       return api<{ source: SourceDto; jobId: string }>(`/api/projects/${projectId}/sources`, { method: 'POST', body: f });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.sources(projectId ?? '') }),
@@ -477,8 +481,11 @@ export const useRadar = (projectId?: string | null) => useQuery({ queryKey: ['ra
 
 // ───────────── phases 6 and 7: connections, plans and billing ─────────────
 
-export type IntegrationKind = 'GITHUB' | 'SLACK' | 'GOOGLE_DRIVE';
+export type IntegrationKind = 'GITHUB' | 'SLACK' | 'GOOGLE_DRIVE' | 'JIRA';
 export interface IntegrationDto { kind: IntegrationKind; connected: boolean; hint: string | null; updatedAt: string | null; updatedByName: string | null }
+/** Which tools this server can connect with one click ("Connect with Slack"), admins only. */
+export const useOAuthAvailable = () => useQuery({ queryKey: ['oauth-available'], queryFn: () => api<Record<IntegrationKind, boolean>>('/api/admin/integrations/oauth'), staleTime: 5 * 60_000 });
+export const useStartOAuth = () => useMutation({ mutationFn: (kind: IntegrationKind) => api<{ url: string }>(`/api/admin/integrations/${kind}/oauth/start`, { method: 'POST' }) });
 export const useIntegrations = () => useQuery({ queryKey: ['integrations'], queryFn: () => api<IntegrationDto[]>('/api/integrations') });
 export function useIntegrationMutations() {
   const qc = useQueryClient();
@@ -496,3 +503,25 @@ export interface BillingDto {
 }
 export const useBilling = () => useQuery({ queryKey: ['billing'], queryFn: () => api<BillingDto>('/api/admin/billing') });
 export const useCheckout = () => useMutation({ mutationFn: () => api<{ url: string }>('/api/admin/billing/checkout', { method: 'POST' }) });
+
+// ───────────── automatic sync and new-evidence notices ─────────────
+export const useSetAutoSync = (projectId?: string | null) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (p: { id: string; autoSync: boolean }) => api<SourceDto>(`/api/sources/${p.id}`, { method: 'PATCH', json: { autoSync: p.autoSync } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.sources(projectId ?? '') }),
+  });
+};
+
+export interface NoticeDto { id: string; handoverId: string; kind: 'SOURCE_CHANGED' | 'SYNC_FAILED'; message: string; details: Record<string, unknown>; createdAt: string; updatedAt: string }
+/** What the scheduled syncs found for the lead of this handover. Refreshed every minute while the page is open. */
+export const useNotices = (h?: string | null, enabled = true) => useQuery({
+  queryKey: ['notices', h ?? ''], queryFn: () => api<NoticeDto[]>(`/api/handovers/${h}/notices`), enabled: !!h && enabled, refetchInterval: 60_000,
+});
+export const useDismissNotice = (h?: string | null) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`/api/handovers/${h}/notices/${id}/dismiss`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notices', h ?? ''] }),
+  });
+};
