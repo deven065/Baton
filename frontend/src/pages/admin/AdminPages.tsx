@@ -20,6 +20,10 @@ const LEVELS = ['Public', 'Internal', 'Confidential', 'Restricted'] as const;
 type Level = (typeof LEVELS)[number];
 const toDto = (l: Level) => l.toUpperCase() as SensitivityDto;
 const fromDto = (d: SensitivityDto) => sens(d) as Level;
+// Plain names for the four levels, used where an admin sets what a person may see.
+const ACCESS_LABEL: Record<SensitivityDto, string> = {
+  PUBLIC: 'Public only', INTERNAL: 'Team material', CONFIDENTIAL: 'Sensitive material', RESTRICTED: 'Full access',
+};
 const initials = (n: string) => n.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 const toneOf = (id: string) => [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 0) % 6;
 const errText = (e: unknown) => {
@@ -255,9 +259,9 @@ function TeamEditor({ projectId }: { projectId: string }) {
               <select aria-label={`Access level of ${m.displayName}`} title="What this person can see, across the whole organisation" value={m.clearance}
                 disabled={setClearance.isPending} onChange={e => setClearance.mutate({ id: m.userId, clearance: e.target.value as SensitivityDto })}
                 className="rounded-lg border border-line-strong bg-card px-2 py-1.5 text-small">
-                {LEVELS.map(l => <option key={l} value={toDto(l)}>{l}</option>)}
+                {LEVELS.map(l => <option key={l} value={toDto(l)}>{ACCESS_LABEL[toDto(l)]}</option>)}
               </select>
-            ) : <SensitivityChip level={sens(m.clearance)} />}
+            ) : <Chip>{ACCESS_LABEL[m.clearance]}</Chip>}
             <Button kind="ghost" aria-label={`Remove ${m.displayName}`} onClick={() => remove.mutate(m.userId)}><X className="size-4" /></Button>
           </li>
         ))}
@@ -271,7 +275,7 @@ function TeamEditor({ projectId }: { projectId: string }) {
       </form>
       {err && <Banner tone="conflict" icon={AlertTriangle}>{errText(err)}</Banner>}
       <p className="text-caption text-ink-500">
-        Access level decides what each person can see: Public &lt; Internal &lt; Confidential &lt; Restricted. It applies across the organisation
+        Access decides what each person can see, from least to most: Public only, Team material, Sensitive material, Full access. It applies across the organisation
         {isAdmin ? ' and is recorded in the audit log.' : '; ask an admin to change it.'}
       </p>
     </div>
