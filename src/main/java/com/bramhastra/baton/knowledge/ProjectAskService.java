@@ -61,7 +61,8 @@ public class ProjectAskService {
             Answer in 2 to 4 plain sentences. Cite the facts you use as [1], [2]. Say who decided or wrote something when a fact says so.
             If the facts only partly answer the question, say what is known and what is not. If a decision is recorded without a reason, say
             that the reason is not written down. If the facts do not answer the question, set "found" to false.
-            Never invent names, dates, numbers or reasons.
+            Never invent names, dates, numbers or reasons. Do not add examples, lists, tools or details the facts do not state:
+            if a fact is general (for example "all project accounts"), keep it that general.
             Reply with JSON only: {"found": true|false, "answer": "<text with [n] citations>", "cite": [<fact numbers used>]}.
             """;
 

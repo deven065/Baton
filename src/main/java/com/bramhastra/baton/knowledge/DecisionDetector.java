@@ -169,6 +169,22 @@ public final class DecisionDetector {
         return out;
     }
 
+    /** Someone who acts: "we", "I", "the team", or a name right before the verb. */
+    private static final Pattern ACTOR_BEFORE = Pattern.compile("(?:\\b(?:[Ww]e|I|[Tt]hey|[Tt]eam|[Ee]veryone|[Hh]e|[Ss]he)\\b|"
+            + "\\b[A-Z][a-z]{2,}\\b(?<!\\bThe)(?<!\\bThis)(?<!\\bAn)(?<!\\bIt))"
+            + "\\s*(?:(?:all|also|then|have|has|had|just|finally|already|will|formally)\\s+)*$");
+
+    /**
+     * The weaker cues ("approved", "will use") also describe how a product works ("the lead shares the approved version"),
+     * so they only count when a person or the team is the one doing it.
+     */
+    private static boolean lacksActor(Cue c, String text, int start) {
+        if (!c.verb().equals("approve") && !c.verb().equals("use")) {
+            return false;
+        }
+        return !ACTOR_BEFORE.matcher(text.substring(0, start)).find();
+    }
+
     private static Found fromSentence(Passage p, List<Message> messages, int index, Sentence s) {
         String text = s.text().replaceAll("\\*\\*|`{3}", "");
         String head = text.substring(0, Math.min(text.length(), 400));
@@ -179,7 +195,7 @@ public final class DecisionDetector {
         Matcher bestMatch = null;
         for (Cue c : CUES) {
             Matcher m = c.pattern().matcher(text);
-            if (m.find() && (best == null || c.strength() > best.strength())) {
+            if (m.find() && !lacksActor(c, text, m.start()) && (best == null || c.strength() > best.strength())) {
                 // A hedge before the cue ("maybe we decided…") already failed above; one after it is part of the reason.
                 best = c;
                 bestMatch = m;

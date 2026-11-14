@@ -64,6 +64,16 @@ class DecisionDetectorTest {
     }
 
     @Test
+    void productDescriptionIsNotMistakenForDecisions() {
+        assertThat(detect("The lead shares the approved version with each recipient and role.")).isEmpty();
+        assertThat(detect("Approve handover. The approved handover is frozen and signed.")).isEmpty();
+        assertThat(detect("Approve claim proposes version 2.")).isEmpty();
+        assertThat(detect("Neha approved the Razorpay budget for the launch."))
+                .singleElement().satisfies(d -> assertThat(d.title()).containsIgnoringCase("razorpay"));
+        assertThat(detect("We approved moving the vendor contract to the new plan.")).hasSize(1);
+    }
+
+    @Test
     void reschedulingWithAReasonAfterIt() {
         String text = "[10:02] Priya: Pushed public launch to Nov 29 after canteen feedback on the menu flow.";
         assertThat(detect(text)).singleElement().satisfies(d -> {
