@@ -233,9 +233,12 @@ function TeamEditor({ projectId }: { projectId: string }) {
   const { data: team = [], isLoading, error } = useTeam(projectId);
   const { data: people = [] } = useDirectory();
   const { add, role, remove } = useTeamMutations(projectId);
+  const setClearance = useUpdateUser();
+  // Clearance applies to the person across the whole organisation, so only an admin may change it; a lead sees it.
+  const isAdmin = useSession().isAdmin;
   const [pick, setPick] = useState('');
   const available = people.filter(p => !team.some(t => t.userId === p.id));
-  const err = add.error ?? role.error ?? remove.error;
+  const err = add.error ?? role.error ?? remove.error ?? setClearance.error;
   return (
     <div className="flex flex-col gap-3">
       <QueryState loading={isLoading} error={error} />
@@ -248,6 +251,13 @@ function TeamEditor({ projectId }: { projectId: string }) {
               <option value="PROJECT_LEAD">Lead</option>
               <option value="MEMBER">Member</option>
             </select>
+            {isAdmin ? (
+              <select aria-label={`Access level of ${m.displayName}`} title="What this person can see, across the whole organisation" value={m.clearance}
+                disabled={setClearance.isPending} onChange={e => setClearance.mutate({ id: m.userId, clearance: e.target.value as SensitivityDto })}
+                className="rounded-lg border border-line-strong bg-card px-2 py-1.5 text-small">
+                {LEVELS.map(l => <option key={l} value={toDto(l)}>{l}</option>)}
+              </select>
+            ) : <SensitivityChip level={sens(m.clearance)} />}
             <Button kind="ghost" aria-label={`Remove ${m.displayName}`} onClick={() => remove.mutate(m.userId)}><X className="size-4" /></Button>
           </li>
         ))}
@@ -260,6 +270,10 @@ function TeamEditor({ projectId }: { projectId: string }) {
         <Button kind="primary" type="submit" disabled={!pick || add.isPending}>Add</Button>
       </form>
       {err && <Banner tone="conflict" icon={AlertTriangle}>{errText(err)}</Banner>}
+      <p className="text-caption text-ink-500">
+        Access level decides what each person can see: Public &lt; Internal &lt; Confidential &lt; Restricted. It applies across the organisation
+        {isAdmin ? ' and is recorded in the audit log.' : '; ask an admin to change it.'}
+      </p>
     </div>
   );
 }

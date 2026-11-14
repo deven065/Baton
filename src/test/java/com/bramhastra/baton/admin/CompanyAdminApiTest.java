@@ -177,7 +177,8 @@ class CompanyAdminApiTest {
                 .andExpect(jsonPath("$[0].leads[0]").value("Ben Lead"));
         // The admin manages the team list but cannot open the project itself.
         send(get("/api/projects/" + project + "/team"), admin, null)
-                .andExpect(status().isOk()).andExpect(jsonPath("$[0].role").value("PROJECT_LEAD"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].role").value("PROJECT_LEAD"))
+                .andExpect(jsonPath("$[0].clearance").isString());
         send(get("/api/projects/" + project), admin, null).andExpect(status().isNotFound());
 
         String benTemp = JsonPath.read(send(post("/api/admin/users/" + benId + "/reset-password"),

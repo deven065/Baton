@@ -65,7 +65,8 @@ public class ProjectAdminService {
                 .list();
     }
 
-    public record TeamMember(UUID userId, String displayName, String email, ProjectRole role, Instant joinedAt) {
+    public record TeamMember(UUID userId, String displayName, String email, ProjectRole role, Instant joinedAt,
+            String clearance) {
     }
 
     /**
@@ -76,13 +77,14 @@ public class ProjectAdminService {
     public List<TeamMember> team(CurrentUser me, UUID projectId) {
         requireManager(me, projectId);
         return jdbc.sql("""
-                SELECT u.id, u.display_name, u.email, m.role, m.joined_at
+                SELECT u.id, u.display_name, u.email, m.role, m.joined_at, u.clearance
                 FROM project_member m JOIN app_user u ON u.id = m.user_id
                 WHERE m.project_id = :p ORDER BY m.role DESC, u.display_name
                 """).param("p", projectId)
                 .query((rs, n) -> new TeamMember(rs.getObject("id", UUID.class), rs.getString("display_name"),
                         rs.getString("email"), ProjectRole.valueOf(rs.getString("role")),
-                        rs.getTimestamp("joined_at").toInstant()))
+                        rs.getTimestamp("joined_at").toInstant(),
+                        com.bramhastra.baton.common.Sensitivity.ofLevel(rs.getInt("clearance")).name()))
                 .list();
     }
 

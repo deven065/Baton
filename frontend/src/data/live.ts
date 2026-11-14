@@ -254,7 +254,7 @@ export interface AuditRowDto {
   entityId: string | null; projectId: string | null; details: string;
 }
 export interface AdminProjectDto { id: string; name: string; description: string | null; leads: string[]; members: number; handovers: number; createdAt: string }
-export interface TeamMemberDto { userId: string; displayName: string; email: string; role: 'PROJECT_LEAD' | 'MEMBER'; joinedAt: string }
+export interface TeamMemberDto { userId: string; displayName: string; email: string; role: 'PROJECT_LEAD' | 'MEMBER'; joinedAt: string; clearance: SensitivityDto }
 export interface PersonDto { id: string; displayName: string; email: string }
 
 export const qa = {
@@ -307,7 +307,7 @@ export function useCreateUser() {
   });
 }
 export function useUpdateUser() {
-  const inv = useInvalidate(qa.users, qa.groups, ['admin', 'audit'], qa.directory);
+  const inv = useInvalidate(qa.users, qa.groups, ['admin', 'audit'], qa.directory, ['team']);
   return useMutation({
     mutationFn: ({ id, ...p }: { id: string; displayName?: string; orgRole?: 'ADMIN' | 'MEMBER'; clearance?: SensitivityDto; groups?: string[]; active?: boolean }) =>
       api<AdminUserDto>(`/api/admin/users/${id}`, { method: 'PATCH', json: p }),
