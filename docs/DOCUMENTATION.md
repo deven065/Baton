@@ -202,7 +202,11 @@ source to members of those groups.
 
    Stages are idempotent and resume after a crash. A claim is visible only to someone who may see **every**
    passage it cites.
-5. **The person leaving answers** exit questions. Each answer is stored as testimony and re-scores the claims it
+5. **The lead can add their own exit questions** (dashboard, "Exit interview questions": `POST /api/handovers/{id}/gaps`
+   with `{"question": …}`, lead only, 3–500 characters, no keys or passwords, no repeats, up to 50). They go first, are kept
+   when the reconstruction runs again, can be taken back while unanswered (`DELETE /api/handovers/{id}/gaps/{gapId}`; generated
+   questions are skipped, not deleted) and are audited (`GAP_ADDED`, `GAP_REMOVED`).
+   **The person leaving answers** exit questions. Each answer is stored as testimony and re-scores the claims it
    touches.
 6. **The lead reviews** claims (states: `PENDING → ACCEPTED | EDITED | REJECTED | NEEDS_INFO`; rejected and
    needs-info can go back to pending) and resolves conflicts.
@@ -785,7 +789,7 @@ decides each person's role. The Figma plugin that draws the product design (file
 ## 19. Testing
 
 ```bash
-./mvnw test          # 130 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
+./mvnw test          # 131 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
 cd frontend && npx tsc -b --noEmit && npm run build
 ```
 

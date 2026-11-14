@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { NextStepGuide } from '@/components/layout/guide';
 import { EvidenceNotices } from '@/components/layout/notices';
+import { ExitQuestions } from '@/components/layout/exit-questions';
 import { StartHandoverModal } from './StartHandover';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -85,6 +86,8 @@ export default function Dashboard() {
         </Table>
         <QueryState loading={handovers.isLoading} error={handovers.error} empty={handovers.data?.length === 0} emptyText="No handovers yet." />
       </section>
+
+      {handover && <ExitQuestions handoverId={handover.id} leaverName={handover.departingName} />}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         <Card className="flex flex-col">

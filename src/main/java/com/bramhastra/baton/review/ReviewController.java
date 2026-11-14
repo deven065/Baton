@@ -78,6 +78,19 @@ public class ReviewController {
         return review.addClaim(currentUser.get(), handoverId, req);
     }
 
+    /** The lead adds their own exit-interview question. */
+    @PostMapping("/handovers/{handoverId}/gaps")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ClaimQueryService.GapView addQuestion(@PathVariable UUID handoverId, @RequestBody Map<String, String> body) {
+        return testimony.addQuestion(currentUser.get(), handoverId, body == null ? null : body.get("question"));
+    }
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/handovers/{handoverId}/gaps/{gapId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeQuestion(@PathVariable UUID handoverId, @PathVariable UUID gapId) {
+        testimony.removeQuestion(currentUser.get(), handoverId, gapId);
+    }
+
     /** Exit interview: only the departing member answers. */
     @PostMapping("/gaps/{gapId}/answer")
     public ClaimQueryService.GapView answer(@PathVariable UUID gapId, @RequestBody TestimonyService.Answer req) {

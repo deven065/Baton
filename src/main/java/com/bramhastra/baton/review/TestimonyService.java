@@ -181,6 +181,65 @@ public class TestimonyService {
         return query.gaps(h.id(), me).stream().filter(x -> x.id().equals(g.id())).findFirst().orElseThrow();
     }
 
+    static final int MAX_CUSTOM_QUESTIONS = 50;
+
+    /**
+     * The lead writes their own exit-interview question, next to the ones Baton generates. It goes first (priority 1),
+     * is never removed by a re-run of the reconstruction, and the person leaving answers it like any other.
+     */
+    @Transactional
+    public ClaimQueryService.GapView addQuestion(CurrentUser me, UUID handoverId, String question) {
+        Handover h = handoverAccess.requireLead(me, handoverId);
+        if (h.status() == com.bramhastra.baton.handover.HandoverStatus.ARCHIVED) {
+            throw new ApiException(ErrorCode.INVALID_TRANSITION, "This handover is archived");
+        }
+        String q = question == null ? "" : question.strip().replaceAll("\s+", " ");
+        if (q.length() < 3 || q.length() > 500) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, "Request validation failed",
+                    Map.of("question", "Write the question in 3 to 500 characters"));
+        }
+        Redactor.Result redacted = redactor.redact(q);
+        if (redacted.redactions().stream().anyMatch(r -> FORBIDDEN.contains(r.kind()))) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, "Request validation failed",
+                    Map.of("question", "That looks like a key or password. Ask where it is kept instead of pasting it"));
+        }
+        String text = redacted.text();
+        boolean duplicate = jdbc.sql("SELECT count(*) FROM gap_question WHERE handover_id = :h AND lower(question) = lower(:q)")
+                .param("h", h.id()).param("q", text).query(Integer.class).single() > 0;
+        if (duplicate) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, "Request validation failed",
+                    Map.of("question", "That question is already on the list"));
+        }
+        int mine = jdbc.sql("SELECT count(*) FROM gap_question WHERE handover_id = :h AND added_by IS NOT NULL")
+                .param("h", h.id()).query(Integer.class).single();
+        if (mine >= MAX_CUSTOM_QUESTIONS) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, "Request validation failed",
+                    Map.of("question", "A handover can have up to " + MAX_CUSTOM_QUESTIONS + " questions of your own"));
+        }
+        UUID id = jdbc.sql("""
+                INSERT INTO gap_question (handover_id, kind, question, priority, status, added_by)
+                VALUES (:h, 'OTHER', :q, 1, 'OPEN', :me) RETURNING id
+                """).param("h", h.id()).param("q", text).param("me", me.id()).query(UUID.class).single();
+        audit.record(me.id(), "GAP_ADDED", "gap_question", id, h.projectId(), Map.of());
+        return query.gaps(h.id(), me).stream().filter(x -> x.id().equals(id)).findFirst().orElseThrow();
+    }
+
+    /** Takes back a question the lead wrote, while nobody has answered it. Generated questions are not removed here. */
+    @Transactional
+    public void removeQuestion(CurrentUser me, UUID handoverId, UUID gapId) {
+        Handover h = handoverAccess.requireLead(me, handoverId);
+        Boolean custom = jdbc.sql("SELECT added_by IS NOT NULL FROM gap_question WHERE id = :id AND handover_id = :h AND status IN ('OPEN', 'UNANSWERED') FOR UPDATE")
+                .param("id", gapId).param("h", h.id()).query(Boolean.class).optional().orElse(null);
+        if (custom == null) {
+            throw ApiException.notFound();
+        }
+        if (!custom) {
+            throw new ApiException(ErrorCode.INVALID_TRANSITION, "Only questions you wrote can be removed. Skip a generated one instead");
+        }
+        jdbc.sql("DELETE FROM gap_question WHERE id = :id").param("id", gapId).update();
+        audit.record(me.id(), "GAP_REMOVED", "gap_question", gapId, h.projectId(), Map.of());
+    }
+
     /** Lead or leaver can skip a question; in a sudden exit it stays visible as unanswered for the lead. */
     @Transactional
     public ClaimQueryService.GapView skip(CurrentUser me, UUID gapId, String reason) {
