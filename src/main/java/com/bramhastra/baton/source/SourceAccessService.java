@@ -152,6 +152,9 @@ public class SourceAccessService {
                 UPDATE chunk SET sensitivity = :s, acl_groups = CAST(:a AS text[])
                 WHERE document_id IN (SELECT id FROM document WHERE source_id = :id)
                 """).param("s", level.level()).param("a", acl).param("id", s.id()).update();
+        // Decisions cut from this source are visible to exactly the people who can see their passage.
+        jdbc.sql("UPDATE decision SET sensitivity = :s, acl_groups = CAST(:a AS text[]) WHERE source_id = :id")
+                .param("s", level.level()).param("a", acl).param("id", s.id()).update();
         // Claims take the strictest level of their evidence: re-score every handover in the project now.
         List<UUID> handovers = jdbc.sql("SELECT id FROM handover WHERE project_id = :p AND status <> 'ARCHIVED'")
                 .param("p", s.projectId()).query(UUID.class).list();

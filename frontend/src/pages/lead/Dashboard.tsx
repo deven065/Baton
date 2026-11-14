@@ -11,6 +11,7 @@ import { Avatar, Card, CardHeader, PageHeader, QueryState, Segments, StatCard, T
 import { HANDOVER_STAGE, fmtDate, useGapList, useHandoverList, useSummary, type HandoverDto } from '@/data/live';
 import type { Status } from '@/data/types';
 import { useSession } from '@/lib/auth';
+import { RiskAlerts } from '@/pages/knowledge/RiskAlerts';
 import { cn } from '@/lib/utils';
 
 const HANDOVER_BADGE: Record<HandoverDto['status'], { s: Status; l: string }> = {
@@ -60,6 +61,7 @@ export default function Dashboard() {
       {starting && <StartHandoverModal onClose={() => setStarting(false)} />}
       <EvidenceNotices handoverId={handover?.id} />
       <NextStepGuide onStart={() => setStarting(true)} />
+      <RiskAlerts projectId={project?.id} compact />
       <div className="reveal-list grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Claims" value={String(summary?.total ?? '–')} note={summary ? `${summary.byStatus.VERIFIED ?? 0} verified · ${summary.byStatus.SINGLE_SOURCE ?? 0} single source` : 'No handover yet'} />
         <StatCard label="Claims to review" value={String(summary ? toReview : '–')} note={`${inferred} inferred · ${missing} missing evidence`} />

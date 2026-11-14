@@ -1,5 +1,5 @@
 // Live data from the Spring Boot API. DTO shapes mirror the backend records (see root README "API").
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/http';
 import type { Sensitivity, Status } from './types';
 
@@ -590,3 +590,72 @@ export function useChangeSourceAccess(projectId?: string | null) {
     onSuccess: inv,
   });
 }
+
+// ───────────── Always-on knowledge: decisions, capture, who knows what, cited answers, risk alerts ─────────────
+
+export interface DecisionDto {
+  id: string; title: string; reasoning: string | null; alternatives: string[]; decidedBy: string | null; decidedAt: string | null;
+  quote: string; topic: string | null; confidence: number; hasReason: boolean; review: 'AUTO' | 'CONFIRMED' | 'REJECTED';
+  docTitle: string; sourceTitle: string; sourceType: string; sourceId: string; chunkId: string | null; url: string | null;
+}
+export interface DecisionLogDto { items: DecisionDto[]; topics: { name: string; count: number }[]; people: { name: string; count: number }[]; total: number; withReason: number }
+export interface DecisionFilters { q?: string; topic?: string; person?: string }
+
+export const useDecisions = (projectId?: string | null, f: DecisionFilters = {}) => {
+  const qs = new URLSearchParams();
+  if (f.q?.trim()) qs.set('q', f.q.trim());
+  if (f.topic) qs.set('topic', f.topic);
+  if (f.person) qs.set('person', f.person);
+  return useQuery({
+    queryKey: ['decisions', projectId ?? '', f.q ?? '', f.topic ?? '', f.person ?? ''],
+    queryFn: () => api<DecisionLogDto>(`/api/projects/${projectId}/decisions?${qs}`),
+    enabled: !!projectId, placeholderData: keepPreviousData,
+  });
+};
+export function useReviewDecision(projectId?: string | null) {
+  const inv = useInvalidate(['decisions', projectId ?? ''], ['capture', projectId ?? ''], ['alerts', projectId ?? '']);
+  return useMutation({
+    mutationFn: (p: { id: string; review: DecisionDto['review'] }) => api<unknown>(`/api/decisions/${p.id}`, { method: 'PATCH', json: { review: p.review } }),
+    onSuccess: inv,
+  });
+}
+
+export interface CaptureDto {
+  watching: boolean; checkEveryMinutes: number; decisions: number; decisionsThisWeek: number; withReason: number; lastCapturedAt: string | null;
+  sources: { id: string; title: string; type: string; status: string; live: boolean; autoSync: boolean; lastCheckedAt: string | null; lastChangedAt: string | null; decisions: number }[];
+  recent: { id: string; title: string; decidedBy: string | null; decidedAt: string | null; hasReason: boolean }[];
+}
+export const useCapture = (projectId?: string | null) =>
+  useQuery({ queryKey: ['capture', projectId ?? ''], queryFn: () => api<CaptureDto>(`/api/projects/${projectId}/capture`), enabled: !!projectId });
+export function useCaptureScan(projectId?: string | null) {
+  const inv = useInvalidate(['decisions', projectId ?? ''], ['capture', projectId ?? ''], ['alerts', projectId ?? '']);
+  return useMutation({ mutationFn: () => api<{ decisions: number }>(`/api/projects/${projectId}/capture/scan`, { method: 'POST' }), onSuccess: inv });
+}
+
+export interface KnowledgeEvidenceDto { quote: string; source: string; sourceType: string; at: string | null; url: string | null; chunkId: string | null; why: string | null }
+export interface ExpertDto {
+  name: string; userId: string | null; role: string | null; onProject: boolean; leaving: boolean; score: number; share: number; passages: number;
+  firstActive: string | null; lastActive: string | null; evidence: KnowledgeEvidenceDto[];
+}
+export interface ExpertsDto {
+  query: string; terms: string[]; passages: number; experts: ExpertDto[];
+  verdict: { level: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'; singlePointOfFailure: boolean; backup: string | null; backupUserId: string | null; message: string };
+}
+export const useFindExperts = (projectId?: string | null) =>
+  useMutation({ mutationFn: (q: string) => api<ExpertsDto>(`/api/projects/${projectId}/experts?q=${encodeURIComponent(q)}`) });
+
+export interface ProjectAnswerDto {
+  found: boolean; confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE'; answer: string; mode: 'ai' | 'search';
+  sources: { n: number; kind: 'DECISION' | 'CLAIM' | 'PASSAGE'; title: string; quote: string | null; source: string; author: string | null; at: string | null; url: string | null; chunkId: string | null; detail: string }[];
+  askInstead: { name: string; userId: string | null; leaving: boolean; reason: string; evidence: KnowledgeEvidenceDto[] } | null;
+}
+export const useProjectAsk = (projectId?: string | null) =>
+  useMutation({ mutationFn: (question: string) => api<ProjectAnswerDto>(`/api/projects/${projectId}/ask`, { method: 'POST', json: { question } }) });
+
+export interface RiskAlertDto {
+  kind: 'SOLE_CONTRIBUTOR' | 'LEAVING_COVERAGE' | 'SOLE_ACCESS'; severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'; text: string; topic: string | null; person: string | null;
+  personUserId: string | null; leaving: boolean; passages: number; lastActive: string | null; evidence: KnowledgeEvidenceDto[]; suggestion: string | null; backup: string | null;
+}
+export interface RiskAlertsDto { windowDays: number; summary: { critical: number; high: number; medium: number; low: number }; items: RiskAlertDto[] }
+export const useRiskAlerts = (projectId?: string | null, enabled = true) =>
+  useQuery({ queryKey: ['alerts', projectId ?? ''], queryFn: () => api<RiskAlertsDto>(`/api/projects/${projectId}/risk/alerts`), enabled: !!projectId && enabled, staleTime: 60_000 });

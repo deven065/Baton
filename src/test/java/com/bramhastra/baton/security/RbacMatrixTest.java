@@ -91,7 +91,7 @@ class RbacMatrixTest {
 
     final Map<Who, String> token = new LinkedHashMap<>();
     DemoFixture demo;
-    String p, h, claim, otherClaim, gap, source, chunk, job, share, item, group, arjunId, rahulId, adminUserId;
+    String p, h, claim, otherClaim, gap, source, chunk, job, share, item, group, arjunId, rahulId, adminUserId, decisionId;
     int claimVersion;
 
     @BeforeAll
@@ -151,6 +151,9 @@ class RbacMatrixTest {
                 """).param("s", UUID.fromString(source)).query(String.class).single();
         job = jdbc.sql("SELECT id FROM job WHERE project_id = :p ORDER BY created_at LIMIT 1").param("p", demo.projectId).query(String.class).single();
         group = jdbc.sql("SELECT id FROM user_group WHERE name = 'design'").query(String.class).single();
+        // Captured when the sources were read; a made-up id still refuses everyone who is not the lead.
+        decisionId = jdbc.sql("SELECT id FROM decision WHERE project_id = :p ORDER BY id LIMIT 1").param("p", demo.projectId)
+                .query(String.class).optional().orElse(UUID.randomUUID().toString());
 
         // Approve and share with Rahul, so the lifecycle and recipient endpoints have something to aim at.
         jdbc.sql("UPDATE claim SET review_state = 'REJECTED' WHERE handover_id = :h AND status = 'CONFLICTING'").param("h", hid).update();
@@ -216,6 +219,19 @@ class RbacMatrixTest {
         c.add(new Call(HttpMethod.GET, "/api/projects/" + p + "/search?q=deploy", null, members, false));
         c.add(new Call(HttpMethod.GET, "/api/jobs/" + job, null, members, false));
         c.add(new Call(HttpMethod.GET, "/api/projects/" + p + "/risk", null, leadOrAdmin, false));
+        // always-on knowledge: decisions, capture, who knows what, cited answers, risk alerts
+        c.add(new Call(HttpMethod.GET, "/api/projects/" + p + "/decisions", null, members, false));
+        c.add(new Call(HttpMethod.PATCH, "/api/decisions/" + decisionId, Map.of("review", "AUTO"), lead, false));
+        c.add(new Call(HttpMethod.GET, "/api/projects/" + p + "/capture", null, members, false));
+        c.add(new Call(HttpMethod.POST, "/api/projects/" + p + "/capture/scan", null, lead, false));
+        c.add(new Call(HttpMethod.GET, "/api/projects/" + p + "/experts?q=deploy", null, members, false));
+        c.add(new Call(HttpMethod.POST, "/api/projects/" + p + "/ask", Map.of("question", "Who owns the deploys?"), members, false));
+        c.add(new Call(HttpMethod.GET, "/api/projects/" + p + "/risk/alerts", null, leadOrAdmin, false));
+        // stale docs and who-can-see-what
+        c.add(new Call(HttpMethod.GET, "/api/projects/" + p + "/staleness", null, lead, false));
+        c.add(new Call(HttpMethod.POST, "/api/projects/" + p + "/staleness/scan", null, lead, false));
+        c.add(new Call(HttpMethod.GET, "/api/projects/" + p + "/access", null, lead, false));
+        c.add(new Call(HttpMethod.PATCH, "/api/sources/" + source, Map.of("sensitivity", "INTERNAL"), lead, false));
         // the handover, claims and review
         c.add(new Call(HttpMethod.GET, hv, null, leadOrLeaver, false));
         c.add(new Call(HttpMethod.POST, hv + "/reconstruct", null, lead, false));

@@ -201,12 +201,12 @@ public class RiskService {
         };
     }
 
-    static String norm(String s) {
+    public static String norm(String s) {
         return s == null ? "" : s.strip().toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N} ]", "").replaceAll("\\s+", " ");
     }
 
     /** "Priya", "priya.sharma", "Priya Sharma" and "priya@acme.test" all match Priya Sharma. */
-    static boolean matches(String author, String displayName, String email) {
+    public static boolean matches(String author, String displayName, String email) {
         String a = norm(author);
         String n = norm(displayName);
         if (a.isEmpty()) {

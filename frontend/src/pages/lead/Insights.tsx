@@ -7,6 +7,7 @@ import { Avatar, Banner, Card, CardHeader, PageHeader, Progress, QueryState, Sta
 import { fmtDate, useProgress, useRadar, type RiskPersonDto } from '@/data/live';
 import type { Status } from '@/data/types';
 import { useSession } from '@/lib/auth';
+import { RiskAlerts } from '@/pages/knowledge/RiskAlerts';
 import { cn } from '@/lib/utils';
 
 const initials = (n: string) => n.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
@@ -24,6 +25,7 @@ export function RiskRadar() {
   return (
     <>
       <PageHeader title="Knowledge risk" sub={`What ${project?.name ?? 'this project'} would lose if someone left tomorrow, from its own sources. Start handovers before anyone resigns.`} />
+      <RiskAlerts projectId={project?.id} />
       <QueryState loading={isLoading} error={error} />
       {data && (
         <>

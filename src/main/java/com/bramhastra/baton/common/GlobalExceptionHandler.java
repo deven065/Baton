@@ -64,6 +64,15 @@ public class GlobalExceptionHandler {
         return body(ErrorCode.NOT_FOUND, "Not found", null);
     }
 
+    /**
+     * A browser closed a live stream (the team room, job progress) while the server was writing to it. Nobody is left
+     * to answer, and it is not an error: there is nothing to log and nothing to send.
+     */
+    @ExceptionHandler(org.springframework.web.context.request.async.AsyncRequestNotUsableException.class)
+    void clientGone(org.springframework.web.context.request.async.AsyncRequestNotUsableException e) {
+        // intentionally empty
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiError> unexpected(Exception e, HttpServletRequest request) {
         // Never log the message or stack trace text: they can contain company content. The ref lets a user

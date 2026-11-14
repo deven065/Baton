@@ -151,6 +151,44 @@ source to members of those groups.
 - **Share**: share an approved version with team members, each with a view name and an expiry (up to 90 days).
   Track who opened and acknowledged it; revoke at any time.
 
+### Project knowledge (always on, not just at handover)
+A project's knowledge is captured **continuously**, at project level, with no handover needed. Every time a source is
+read (added, re-synced by hand, or picked up by the background sync, hourly for live sources by default) its passages
+are mined, and the results are available to every project member at `/app/knowledge` (leads) and `/handover/knowledge`
+(successors), filtered by what each person may see.
+
+- **Always-on capture**: a strip at the top of the page shows what is being read, how many decisions were captured, how
+  many have their reason written down, how many are new this week, and when it last updated. A lead can press
+  **Capture now**. Knowledge read before this existed is mined the first time anyone looks.
+- **Decision log with the why**: finds decisions in chat lines, pull-request threads, meeting notes and ADR-style
+  records ("we chose Kafka over RabbitMQ because we need message replay", "going with OneSignal" followed by "because the
+  free-tier quota ran out", "pushed the launch to Nov 29 after canteen feedback") together with the reasoning, the
+  alternatives turned down, who decided and when. Plain rules, no AI, so it works offline and every result can be
+  explained: the quote and the reason are cut word for word from the passage (a test checks this). Questions
+  ("should we…?"), hedges ("maybe we…"), denials ("haven't decided") and requests are skipped. A decision with no
+  reason says so and names who to ask. The lead can **Confirm** a decision or mark it **Not a decision**; the choice
+  survives re-reading the same source. A decision is visible to exactly the people who can see the passage it came from,
+  and follows the source if its access is changed.
+- **Who knows what**: ask "who understands the billing module?" and get a ranked list with evidence. Expertise is what
+  people actually wrote: chat is credited line by line to the person who said it, documents to their author, plus
+  named owners and the person who made a decision about the topic. Recent work counts more (half-life six months);
+  forms of a word match ("payment" finds "payments"). The verdict says whether the top person is a **single point of
+  failure** (one person wrote at least 70% of it, or is the only contributor), names the **backup** (the next person with at
+  least 12% and a passage) or says nobody can cover, and escalates when the top person is leaving.
+- **Risk alerts** (Knowledge risk page and dashboard): sentences instead of numbers: "Only Priya has touched payment
+  gateway in the last 6 months (3 passages, last on 14 Nov), and Priya is leaving", "Priya is leaving, and 2 topics lose
+  their only contributor", "Only Priya knows how to reach the Render account". Topics come from the decisions and
+  claims already captured. Severity is critical when the person is leaving, high or medium by how much rests on them.
+  Each alert shows its evidence and suggests who could cover.
+- **Cited Q&A**: ask anything about the project and get an answer with numbered sources: decisions, handover claims
+  and raw passages, each with its verbatim quote, author, date and link. The confidence is computed by code, not by the
+  model: **high** (a decision or verified fact, confirmed or backed by a second source), **medium**, **low** (partial
+  coverage, or a single loose passage) or **none**. With little evidence it says "I'm not sure" or "I don't know" and
+  **names who to ask** ("Rahul wrote 1 passage about this, most recently on 10 Nov"), never a guess. When the sources
+  record a decision without a reason it says the reason is not written down. With the workspace's own AI on, a model
+  writes the answer from the numbered facts and must cite them; otherwise the answer is assembled from the best fact.
+  Questions are answered only from what the asker may see: a restricted source is never cited or hinted at.
+
 ### For successors
 - **Start here**: project, handover, top risks and blockers, what changed since their previous version.
 - **Checklist**: Day 1 / Week 1 / Month 1 items generated from the claims (no AI), each linked to its claim.
@@ -751,6 +789,13 @@ All paths start with `/api`. Everything needs `Authorization: Bearer <token>` ex
 | POST | `/staleness/{findingId}/decision` | lead | `{status: CONFIRMED\|DISMISSED\|OPEN}` (out of date, still correct, undo) |
 | GET | `/projects/{id}/access` | lead | `{sources, people, teams}`: who can see which source, with the reason when not |
 | PATCH | `/sources/{id}` | lead | `{autoSync?}`, `{sensitivity?, aclGroups?}` (who can see it; applied everywhere and audited) |
+| GET | `/projects/{id}/decisions?q=&topic=&person=&rejected=&limit=` | member | The decision log: `{items, topics, people, total, withReason}`; each item has title, reasoning, alternatives, decidedBy, decidedAt, quote, topic, review, source |
+| PATCH | `/decisions/{id}` | lead | `{review: CONFIRMED\|REJECTED\|AUTO}` |
+| GET | `/projects/{id}/capture` | member | What is being read, decisions captured (total, this week, with the why) and the latest |
+| POST | `/projects/{id}/capture/scan` | lead | Read every source again for decisions, without fetching anything |
+| GET | `/projects/{id}/experts?q=` | member | Ranked experts with evidence, and a verdict (single point of failure, backup, level NONE to CRITICAL) |
+| POST | `/projects/{id}/ask` | member | `{question}` → `{found, confidence HIGH\|MEDIUM\|LOW\|NONE, answer, mode, sources[], askInstead}` |
+| GET | `/projects/{id}/risk/alerts?days=180` | lead, admin | Alerts with severity, evidence and a suggestion |
 
 ### Handovers and review
 | Method | Path | Who | Notes |
@@ -860,7 +905,7 @@ decides each person's role. The Figma plugin that draws the product design (file
 ## 19. Testing
 
 ```bash
-./mvnw test          # 143 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
+./mvnw test          # 166 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
 cd frontend && npx tsc -b --noEmit && npm run build
 ```
 
@@ -911,6 +956,7 @@ dashboard", "renewal is due on 2026-12-01"); a model is expected to find them.
 | Ingest | `RedactorTest`, `ChunkerTest`, `ConnectorTest`, `SourceIngestApiTest`, `TranscriptTest`, `RecordingApiTest` (fake Whisper and chat model: transcription, speakers, playback, delete audio, timestamps on evidence) |
 | Identity and access | `IdentityApiTest`, `AccessPolicyTest`, `PasswordResetApiTest`, `RbacMatrixTest` (every endpoint × every role), `SourceAccessApiTest` (who-can-see-what map with reasons; changing a source's level and teams reaches every passage and claim; bad teams, unknown levels and lead lock-out refused) |
 | Reconstruction and review | `OfflineExtractorTest`, `ReconstructApiTest`, `ReviewApiTest`, `ConflictDecisionTest` (a conflict decision survives re-runs), `LeadQuestionsTest`, `InterviewModeTest` (a vague answer gets one targeted follow-up placed next, a specific one none, no follow-up to a follow-up, kept across re-runs; model follow-ups asking for secrets, repeats or non-questions refused) |
+| Always-on knowledge | `DecisionDetectorTest` (decisions with their why in chat, PR threads, notes and ADRs; questions, hedges, denials and requests ignored), `KnowledgeUnitTest` (who said what, word forms, recency, single-point-of-failure verdicts, answer confidence), `KnowledgeApiTest` (decisions captured from every source and verbatim; the lead's choice survives re-reading; restricted decisions hidden; finder ranks and flags; answers cite sources and admit "I don't know"; alerts escalate when someone leaves) |
 | Staleness | `StaleDetectorTest` (renames, replacements, removals and upgrades read from commits; ordinary commits, updated or newer docs, "instead of" mentions and longer identifiers left alone; GitHub and `git log` formats), `StalenessApiTest` (docs and a commit log read, findings listed, lead-only decisions that survive a re-scan, exit questions about stale docs) |
 | Workspaces and admin | `WorkspaceApiTest`, `DatabaseUrlTest`, `CompanyAdminApiTest`, `HardeningApiTest`, `SafeLogTest` |
 | Handover lifecycle | `HandoverStateMachineTest`, `LifecycleApiTest`, `HandoverFeaturesApiTest` |

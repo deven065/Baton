@@ -18,6 +18,7 @@ import ViewAs from '@/pages/lead/ViewAs';
 import { Approval, Share } from '@/pages/lead/ApprovalShare';
 import { RiskRadar, Successors } from '@/pages/lead/Insights';
 import { AccessPage, StaleDocs } from '@/pages/lead/Governance';
+import { KnowledgePage } from '@/pages/knowledge/KnowledgeHub';
 import ExitInterview from '@/pages/leaver/ExitInterview';
 import { ChecklistPage, Ownership, RecipientTimeline, StartHere } from '@/pages/recipient/RecipientPages';
 import { AskPage } from '@/pages/recipient/AskPage';
@@ -147,6 +148,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="team" element={<RequireRole roles={['lead']}><TeamPage /></RequireRole>} />
               <Route path="risk" element={<RequireRole roles={['lead']}><RiskRadar /></RequireRole>} />
               <Route path="successors" element={<RequireRole roles={['lead']}><Successors /></RequireRole>} />
+              <Route path="knowledge" element={<RequireRole roles={['lead']}><KnowledgePage /></RequireRole>} />
               <Route path="stale-docs" element={<RequireRole roles={['lead']}><StaleDocs /></RequireRole>} />
               <Route path="access" element={<RequireRole roles={['lead']}><AccessPage /></RequireRole>} />
               <Route path="admin/users" element={<RequireAdmin><UsersGroups /></RequireAdmin>} />
@@ -163,6 +165,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/handover" element={<RequireRole roles={['recipient']}><RecipientShell /></RequireRole>}>
               <Route index element={<StartHere />} />
               <Route path="ask" element={<AskPage />} />
+              <Route path="knowledge" element={<KnowledgePage />} />
               <Route path="checklist" element={<ChecklistPage />} />
               <Route path="ownership" element={<Ownership />} />
               <Route path="timeline" element={<RecipientTimeline />} />
