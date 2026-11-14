@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/form';
 import { useAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/http';
 import { cn } from '@/lib/utils';
-import { QUALITIES, useCall, type QualityId, type Remote } from './useCall';
+import { FRAME_RATES, QUALITIES, SMOOTH_FPS, useCall, type FpsId, type QualityId, type Remote } from './useCall';
 import { useRoom, type ChatMessage, type Participant } from './useRoom';
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -131,7 +131,34 @@ function Chat({ messages, selfId, onSend }: { messages: ChatMessage[]; selfId: s
   );
 }
 
+/** Whether the browser has already blocked the camera for this site (null when it will not say). */
+function useCameraBlocked(): boolean | null {
+  const [blocked, setBlocked] = useState<boolean | null>(null);
+  useEffect(() => {
+    let status: PermissionStatus | undefined;
+    const read = () => setBlocked(status ? status.state === 'denied' : null);
+    navigator.permissions?.query({ name: 'camera' as PermissionName })
+      .then(s => { status = s; s.onchange = read; read(); })
+      .catch(() => setBlocked(null)); // Firefox and Safari do not answer for the camera
+    return () => { if (status) status.onchange = null; };
+  }, []);
+  return blocked;
+}
+
 function CallView({ call, inCall, selfName }: { call: ReturnType<typeof useCall>; inCall: Participant[]; selfName: string }) {
+  const blocked = useCameraBlocked();
+  if (call.status === 'asking') {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-6 text-center" role="status">
+        <span className="grid size-14 animate-pulse place-items-center rounded-full bg-brand-50 text-brand-700"><Video className="size-7" aria-hidden /></span>
+        <div>
+          <h2 className="text-h3 font-semibold">Allow your camera and microphone</h2>
+          <p className="mx-auto mt-1 max-w-[340px] text-small text-ink-500">Your browser is asking for permission, usually in a box near the address bar. Choose <strong>Allow</strong> and the call will start. Baton only uses them while you are on a call.</p>
+        </div>
+        <Button onClick={call.cancel}>Cancel</Button>
+      </div>
+    );
+  }
   if (call.status === 'idle') {
     const names = inCall.map(p => first(p.name));
     return (
@@ -141,13 +168,23 @@ function CallView({ call, inCall, selfName }: { call: ReturnType<typeof useCall>
           <h2 className="text-h3 font-semibold">{inCall.length ? `${names.join(', ')} ${inCall.length === 1 ? 'is' : 'are'} on a call` : 'Start a video call'}</h2>
           <p className="mx-auto mt-1 max-w-[320px] text-small text-ink-500">Talk it through with the people on this project. Up to four can be on a call, and video goes straight between your browsers.</p>
         </div>
-        <label className="flex flex-col gap-1.5 text-left">
-          <span className="text-caption font-medium text-ink-700">Video quality</span>
-          <QualityPicker value={call.quality} onChange={call.setQuality} />
-        </label>
-        {call.error && <p role="alert" className="max-w-[340px] text-small text-conflict">{call.error}</p>}
-        <Button kind="primary" size="lg" onClick={() => void call.start()} disabled={call.status !== 'idle'}><Video className="size-5" aria-hidden />{inCall.length ? 'Join the call' : 'Start the call'}</Button>
-        <p className="max-w-[320px] text-caption text-ink-400">Your browser will ask to use your camera and microphone. 4K needs a 4K camera and a fast connection; the call shows what is really being sent.</p>
+        <div className="flex flex-wrap justify-center gap-3 text-left">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-caption font-medium text-ink-700">Video quality</span>
+            <QualityPicker value={call.quality} onChange={call.setQuality} />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-caption font-medium text-ink-700">Smoothness</span>
+            <FpsPicker value={call.fps} onChange={call.setFps} />
+          </label>
+        </div>
+        {(call.error || blocked) && (
+          <p role="alert" className="max-w-[340px] text-small text-conflict">
+            {call.error ?? 'Camera and microphone are blocked for this site. Click the lock or camera icon beside the address, set them to Allow, then try again.'}
+          </p>
+        )}
+        <Button kind="primary" size="lg" onClick={() => void call.start()}><Video className="size-5" aria-hidden />{inCall.length ? 'Join the call' : 'Start the call'}</Button>
+        <p className="max-w-[320px] text-caption text-ink-400">Your browser will ask to use your camera and microphone. Smooth 60 fps is the default, as far as your camera can do it; if your computer struggles, the call lowers it by itself. Raise quality to 2K or 4K only with a matching camera and a fast connection. Testing with two devices in one room? Use headphones on both, or mute one, so the sound doesn’t echo.</p>
       </div>
     );
   }
@@ -155,7 +192,7 @@ function CallView({ call, inCall, selfName }: { call: ReturnType<typeof useCall>
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-ink-900">
       <div className={cn('grid min-h-0 flex-1 auto-rows-fr gap-2 overflow-y-auto p-2', tiles > 1 ? 'sm:grid-cols-2' : 'grid-cols-1')}>
-        {call.remotes.map(r => <Tile key={r.userId} remote={r} />)}
+        {call.remotes.map(r => <Tile key={r.userId} remote={r} relay={call.relay} />)}
         {call.remotes.length === 0 && (
           <div className="grid place-items-center rounded-xl border border-dashed border-ink-500 p-6 text-center text-small text-ink-300">
             {call.status === 'starting' ? 'Joining…' : 'Waiting for others to join. They can open the team room and tap Join the call.'}
@@ -169,9 +206,11 @@ function CallView({ call, inCall, selfName }: { call: ReturnType<typeof useCall>
         <Control on={call.micOn} label={call.micOn ? 'Mute microphone' : 'Unmute microphone'} onClick={call.toggleMic} icon={call.micOn ? Mic : MicOff} />
         {call.hasCamera && <Control on={call.camOn} label={call.camOn ? 'Turn camera off' : 'Turn camera on'} onClick={call.toggleCam} icon={call.camOn ? Video : VideoOff} />}
         <QualityPicker value={call.quality} onChange={call.setQuality} dark />
+        <FpsPicker value={call.fps} onChange={call.setFps} dark />
         <Button kind="danger" aria-label="Leave the call" onClick={call.leave}><PhoneOff className="size-4" aria-hidden />Leave</Button>
         <p className="basis-full text-center text-caption text-ink-300">
           {call.sent ? `Sending ${call.sent.width}×${call.sent.height}${call.sent.fps ? ` at ${call.sent.fps} fps` : ''}` : 'Sound only'}
+          {call.sent && call.sent.fps > 0 && call.sent.fps < SMOOTH_FPS ? ` · your camera tops out at ${call.sent.fps} fps; 60 to 90 needs a camera that supports it` : ''}
           {call.quality === '2160' && call.remotes.length > 1 ? ' · 4K to several people needs a very fast connection; the picture steps down by itself if it struggles' : ''}
         </p>
       </div>
@@ -188,6 +227,15 @@ function QualityPicker({ value, onChange, dark }: { value: QualityId; onChange: 
   );
 }
 
+function FpsPicker({ value, onChange, dark }: { value: FpsId; onChange: (f: FpsId) => void; dark?: boolean }) {
+  return (
+    <select aria-label="Smoothness" value={value} onChange={e => onChange(Number(e.target.value) as FpsId)}
+      className={cn('rounded-lg border px-2.5 py-2 text-small', dark ? 'border-white/20 bg-white/10 text-white' : 'border-line-strong bg-card text-ink-900')}>
+      {FRAME_RATES.map(f => <option key={f.id} value={f.id} className="text-ink-900">{f.label}</option>)}
+    </select>
+  );
+}
+
 function Control({ on, label, onClick, icon: Icon }: { on: boolean; label: string; onClick: () => void; icon: typeof Mic }) {
   return (
     <button type="button" aria-label={label} aria-pressed={!on} title={label} onClick={onClick}
@@ -197,26 +245,37 @@ function Control({ on, label, onClick, icon: Icon }: { on: boolean; label: strin
   );
 }
 
-function Tile({ remote, local, stream, name, muted, off }: { remote?: Remote; local?: boolean; stream?: MediaStream | null; name?: string; muted?: boolean; off?: boolean }) {
+function Tile({ remote, local, stream, name, muted, off, relay }: { remote?: Remote; local?: boolean; stream?: MediaStream | null; name?: string; muted?: boolean; off?: boolean; relay?: boolean }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [size, setSize] = useState('');
+  const [stuck, setStuck] = useState(false);
   const media = local ? stream ?? null : remote?.stream ?? null;
+  const play = () => { void ref.current?.play().then(() => setStuck(false)).catch(() => setStuck(true)); };
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
     if (v.srcObject !== media) v.srcObject = media;
+    // Browsers may refuse to start a picture with sound until the page is clicked; say so instead of freezing.
+    if (media) v.play().then(() => setStuck(false)).catch(() => setStuck(true));
     const update = () => setSize(v.videoWidth ? `${v.videoWidth}×${v.videoHeight}` : '');
     v.addEventListener('resize', update);
     v.addEventListener('loadedmetadata', update);
     return () => { v.removeEventListener('resize', update); v.removeEventListener('loadedmetadata', update); };
   }, [media]);
   const label = local ? name : remote?.name;
-  const status = remote && remote.state !== 'connected' ? (remote.state === 'failed' ? 'Couldn’t connect. This network may block direct video; ask your admin to set up a TURN relay.' : 'Connecting…') : null;
+  const status = remote && remote.state !== 'connected' ? (remote.state === 'failed'
+    ? (relay
+      ? 'Couldn’t connect, even through the relay. Check the TURN settings on the server, or try another network.'
+      : 'Couldn’t connect. One of your networks blocks direct video, and this workspace has no relay server yet. An admin can add one by setting TURN_URL, TURN_USERNAME and TURN_CREDENTIAL on the API (see the documentation).')
+    : 'Connecting…') : null;
   return (
     <div className="relative min-h-[140px] overflow-hidden rounded-xl bg-black">
       <video ref={ref} autoPlay playsInline muted={muted} className={cn('size-full object-contain', local && 'scale-x-[-1]', off && 'invisible')} />
       {(off || !media) && !status && <div className="absolute inset-0 grid place-items-center text-small text-ink-300">{off ? 'Camera off' : ''}</div>}
       {status && <div className="absolute inset-0 grid place-items-center p-4 text-center text-small text-white/90">{status}</div>}
+      {stuck && !status && (
+        <button type="button" onClick={play} className="absolute inset-0 grid place-items-center bg-black/60 text-small font-medium text-white cursor-pointer">Click to play</button>
+      )}
       <span className="absolute bottom-2 left-2 rounded-md bg-black/60 px-2 py-0.5 text-caption text-white">{label}{size ? ` · ${size}` : ''}</span>
       {!local && media && (
         <button type="button" aria-label={`Full screen: ${label}`} onClick={() => void ref.current?.requestFullscreen?.()}

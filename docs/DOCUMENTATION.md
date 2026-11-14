@@ -147,15 +147,28 @@ not on the project gets "not found").
 - **Chat**: one running conversation per project, saved in the company's own database. New messages appear at once
   for everyone, with an unread count on the button. Messages are 1 to 2000 characters, rate limited, and refused if
   they look like a key or password, the same rule as exit-interview answers.
-- **Video call**: up to four people. Quality can be set from HD 720p up to **4K 2160p** and changed during the call;
+- **Video call**: up to four people. Smoothness can be set to 30, **60 (default)** or **90 frames a second**; the
+  browser uses the closest rate the camera really offers (most webcams 30, many 60, a few 90) and the call says when
+  the camera tops out lower. To stop glitches the call watches the outgoing video and, if the computer is the
+  bottleneck twice in a row, lowers the frame rate and then the size by itself and says so. Each person you send to
+  shares one bandwidth budget, incoming video has a small smoothing buffer, and set-up messages are applied one at a
+  time per person. Echo and noise cancelling are on; two devices in one room should use headphones or mute one. Quality can be set from HD 720p up to **4K 2160p** and changed during the call;
   the call shows the size the camera is really sending, because 4K needs a 4K camera and a fast connection.
   Microphone and camera can be switched off, and any incoming picture can go full screen.
 - **How the call works**: browsers connect directly to each other (WebRTC), so the video never passes through Baton's
   servers; Baton only relays the small set-up messages, and only between two people who are both on the call. That
   is why a call costs the server almost nothing at any quality. Because every browser sends its picture to every
   other, four people at 4K is a heavy upload; the picture steps down by itself if the connection struggles.
-- **Networks**: a public STUN server is enough for most home and office networks. Strict firewalls need a TURN relay
-  (see `TURN_URL` below); without one the tile says it could not connect.
+- **Networks**: a public STUN server is enough for many networks, but not all. Two devices on the same Wi-Fi that
+  isolates clients or on a router that cannot loop traffic back, a VPN, a campus or office firewall, or mobile data
+  often cannot reach each other directly, and the tile says "Couldn’t connect". A TURN relay fixes that:
+  1. Create a free account with a TURN provider (for example Metered, whose free plan uses
+     `standard.relay.metered.ca`). In its dashboard add a credential and copy the username and credential.
+  2. On the API host (Render → the API service → Environment) set `TURN_URL` to the provider's addresses, comma
+     separated, for example `turn:standard.relay.metered.ca:80,turn:standard.relay.metered.ca:443,turns:standard.relay.metered.ca:443?transport=tcp`,
+     and set `TURN_USERNAME` and `TURN_CREDENTIAL`. Never commit these.
+  3. Save, let the API restart, then leave and join the call again.
+  Video then goes through the relay only when a direct path is impossible, and stays encrypted end to end.
 - **Limits**: calls and live updates are held in the API process's memory, so a restart ends a running call (the
   browsers say so and can join again); chat history is kept.
 
