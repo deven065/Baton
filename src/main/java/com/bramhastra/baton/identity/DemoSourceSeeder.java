@@ -28,9 +28,9 @@ import com.bramhastra.baton.tenant.TenantContext;
 import com.bramhastra.baton.tenant.TenantRegistry;
 
 /**
- * Fills the demo project with the synthetic sample sources when it has none, so every screen
+ * Fills the demo project with the synthetic sample sources when some are missing, so every screen
  * (decisions, experts, risk alerts, stale docs, access map) has real content on the first visit.
- * It only runs on an empty demo project and never touches a company workspace.
+ * It only adds samples that are missing (by title) and never touches a company workspace.
  */
 @Component
 @Order(20)
@@ -106,20 +106,24 @@ public class DemoSourceSeeder implements ApplicationRunner {
         if (project == null || lead == null) {
             return;
         }
-        Long existing = jdbc.sql("SELECT count(*) FROM source WHERE project_id = :p")
-                .param("p", project.getId()).query(Long.class).single();
-        if (existing != null && existing > 0) {
-            return;
-        }
+        java.util.Set<String> have = new java.util.HashSet<>(jdbc.sql("SELECT title FROM source WHERE project_id = :p")
+                .param("p", project.getId()).query(String.class).list());
+        int added = 0;
         for (Sample s : SAMPLES) {
+            if (have.contains(s.title())) {
+                continue;
+            }
             byte[] bytes = read("demo-seed/" + s.file());
             UUID id = sources.insert(project.getId(), s.type(), s.title(),
                     Map.of("filename", s.filename(), "size", bytes.length), s.sensitivity(), s.groups(), lead.getId());
             StagedFile staged = new StagedFile(s.filename(), "text/plain", bytes);
             sources.stageFile(id, staged, crypto.encrypt(bytes));
             jobs.enqueue(JobKind.INGEST_SOURCE, project.getId(), lead.getId(), Map.of("sourceId", id.toString()));
+            added++;
         }
-        log.info("Loaded {} sample sources into the demo project", SAMPLES.size());
+        if (added > 0) {
+            log.info("Loaded {} sample sources into the demo project", added);
+        }
     }
 
     private static byte[] read(String path) {
