@@ -139,6 +139,26 @@ source to members of those groups.
   is added as evidence and shown back.
 - **Acknowledge**: confirm the handover landed.
 
+### Team room (everyone on a project)
+A round button in the corner of every page opens the project's **chat** and **video call**. It is available to the
+lead, the person leaving and the successors alike, and to nobody outside the project (an organisation admin who is
+not on the project gets "not found").
+
+- **Chat**: one running conversation per project, saved in the company's own database. New messages appear at once
+  for everyone, with an unread count on the button. Messages are 1 to 2000 characters, rate limited, and refused if
+  they look like a key or password, the same rule as exit-interview answers.
+- **Video call**: up to four people. Quality can be set from HD 720p up to **4K 2160p** and changed during the call;
+  the call shows the size the camera is really sending, because 4K needs a 4K camera and a fast connection.
+  Microphone and camera can be switched off, and any incoming picture can go full screen.
+- **How the call works**: browsers connect directly to each other (WebRTC), so the video never passes through Baton's
+  servers; Baton only relays the small set-up messages, and only between two people who are both on the call. That
+  is why a call costs the server almost nothing at any quality. Because every browser sends its picture to every
+  other, four people at 4K is a heavy upload; the picture steps down by itself if the connection struggles.
+- **Networks**: a public STUN server is enough for most home and office networks. Strict firewalls need a TURN relay
+  (see `TURN_URL` below); without one the tile says it could not connect.
+- **Limits**: calls and live updates are held in the API process's memory, so a restart ends a running call (the
+  browsers say so and can join again); chat history is kept.
+
 ### Insight for leads
 - **Knowledge-risk radar** (`/app/risk`): the bus factor (fewest people who wrote half of what the project knows),
   each person's share of the written sources, topics with only one source, access only one person mentions, and
@@ -584,6 +604,13 @@ All settings are environment variables (defaults in `src/main/resources/applicat
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | empty | The GitHub App's (or OAuth App's) credentials |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | empty | The Google OAuth client's credentials |
 
+**Team room video calls**
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CALL_STUN_URL` | `stun:stun.l.google.com:19302` | Public server browsers use to discover their address |
+| `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` | empty | Optional relay for networks that block direct video, e.g. `turn:turn.example.com:3478` (comma-separate several) |
+
 **Email**
 
 | Variable | Default | Purpose |
@@ -680,6 +707,10 @@ All paths start with `/api`. Everything needs `Authorization: Bearer <token>` ex
 | GET | `/chunks/{id}` | visible only | Evidence passage |
 | GET | `/projects/{id}/search?q=` | member | Permission-filtered keyword + vector search |
 | GET | `/projects/{id}/risk` | lead, admin | Knowledge-risk radar |
+| GET · POST | `/projects/{id}/room/chat` | member | Latest messages (`before`, `limit`); send `{body}` → 201. Refuses empty, over 2000 characters, or keys and passwords |
+| GET | `/projects/{id}/room/events` | member | Server-sent events: `hello` (who is on the call), `chat`, `call-joined`, `call-left`, `signal` |
+| POST | `/projects/{id}/room/call/join` · `/leave` | member | Join returns who is already on the call, the cap (4) and the STUN/TURN servers; 409 when full |
+| POST | `/projects/{id}/room/call/signal` | member on the call | Relays `{to, kind: offer\|answer\|ice, data}` to another person on the same call; 404 otherwise |
 
 ### Handovers and review
 | Method | Path | Who | Notes |
@@ -789,7 +820,7 @@ decides each person's role. The Figma plugin that draws the product design (file
 ## 19. Testing
 
 ```bash
-./mvnw test          # 131 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
+./mvnw test          # 134 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
 cd frontend && npx tsc -b --noEmit && npm run build
 ```
 

@@ -11,6 +11,7 @@ import { useCurrentShare } from '@/pages/recipient/RecipientPages';
 import { Avatar, Kbd, Logo } from '@/components/ui/misc';
 import { NextStepLink } from '@/components/layout/guide';
 import { RecordingPlayer } from '@/components/ui/recording';
+import { RoomDock } from '@/components/room/RoomDock';
 import { chooseHandover, useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 
@@ -402,6 +403,7 @@ export function AppShell() {
         </main>
       </div>
       <RecordingPlayer />
+      <RoomDock />
     </div>
   );
 }
@@ -456,6 +458,7 @@ export function RecipientShell() {
       <main key={location.pathname} className="page stagger mx-auto flex max-w-[1120px] flex-col gap-6 px-4 py-6 sm:py-8">
         <Outlet />
       </main>
+      <RoomDock />
     </div>
   );
 }
@@ -472,6 +475,7 @@ export function FocusShell({ title, right, children }: { title: string; right?: 
         {right}
       </header>
       <main className="animate-rise mx-auto max-w-[1120px] px-4 py-6 sm:py-8">{children}</main>
+      <RoomDock />
     </div>
   );
 }
