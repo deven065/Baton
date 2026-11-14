@@ -24,7 +24,8 @@ Team Bramhastra: Deven Rikame (lead, backend) · Bhushan Shinde (database, AI pr
 |---|---|
 | **Companies** | Self-service sign-up with your own PostgreSQL · people, groups, clearances · projects and teams · audit log · connect GitHub, Slack and Google Drive with your own credentials · bring your own AI key · Free and Team plans · disconnect any time and keep everything |
 | **Project leads** | Connect tools with **one click** (Slack, GitHub, Google Drive) or a key (Jira too), kept current by **automatic sync** that tells you when new evidence changes a handover · add sources (including Slack, WhatsApp and Discord chat exports, and **meeting recordings**: transcribed with timestamps, and every claim plays the moment it was said) · reconstruct a handover with live progress · review claims with full history · resolve conflicts · timeline · view as a recipient · approval gate · versions and diff · share with expiry and revoke · successor progress · knowledge-risk radar · living handovers (drift, new version, move recipients) · signed export and verify |
-| **The person leaving** | Exit interview: answers become evidence; the lead can add their own questions next to the generated ones |
+| **The person leaving** | **AI interview mode**: questions written from the gaps in the claim graph; after each answer the interviewer asks one targeted follow-up when something is still missing (an owner, a place to check, a date). Answers become evidence; the lead can add their own questions |
+| **Governance** | **Stale docs**: flags documentation that a later commit or pull request renamed, replaced, removed or upgraded, with the exact line and change · **Who can see what**: per-team access control with a people × sources map, the reason for every "cannot see", and changes that apply everywhere at once |
 | **Everyone on a project** | **Team room**: project chat and video calls for up to four people, from HD up to 4K, straight between browsers |
 | **Successors** | Start here · Day 1 / Week 1 / Month 1 checklist · ownership map · timeline · **Ask the handover** with cited answers · send unanswered questions to the person leaving · what changed since their last version · acknowledge |
 
@@ -82,7 +83,7 @@ To sign up a test company against a local database, start the API with `ALLOW_PR
 ## Tests
 
 ```bash
-./mvnw test                   # 134 tests against a real pgvector container (needs Docker)
+./mvnw test                   # 143 tests against a real pgvector container (needs Docker)
 ```
 
 They also run on every push in [GitHub Actions](.github/workflows/ci.yml), together with the frontend build.

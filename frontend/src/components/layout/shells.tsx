@@ -1,12 +1,12 @@
 import {
   Database, Sparkles, Cable, CreditCard, Radar, TrendingUp,
-  AlertTriangle, FolderKanban, UsersRound, Bell, Check, CheckSquare, ChevronDown, ChevronRight, Clock, Eye, FileText, Home, Layers, LogOut, Menu, Pencil, Plug, Search, Share2, Settings, ShieldCheck, UserCog, Users, X,
+  AlertTriangle, FolderKanban, UsersRound, Bell, Check, CheckSquare, ChevronDown, ChevronRight, Clock, Eye, FileText, FileWarning, Home, Layers, LogOut, Menu, Pencil, Plug, Search, Share2, Settings, ShieldCheck, UserCog, Users, X,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { SensitivityChip } from '@/components/ui/badge';
-import { fmtDate, fmtDateTime, useGapList, useHandoverList, useNotices, useRenameHandover, useShares, useSummary } from '@/data/live';
+import { fmtDate, fmtDateTime, useGapList, useHandoverList, useNotices, useRenameHandover, useShares, useStaleDocs, useSummary } from '@/data/live';
 import { useCurrentShare } from '@/pages/recipient/RecipientPages';
 import { Avatar, Kbd, Logo } from '@/components/ui/misc';
 import { NextStepLink } from '@/components/layout/guide';
@@ -39,12 +39,15 @@ const NAV_ADMIN: Nav[] = [
 ];
 const NAV_TEAM: Nav = { to: '/app/team', label: 'Team', icon: UsersRound };
 const NAV_RISK: Nav = { to: '/app/risk', label: 'Knowledge risk', icon: Radar };
+const NAV_STALE: Nav = { to: '/app/stale-docs', label: 'Stale docs', icon: FileWarning };
+const NAV_ACCESS: Nav = { to: '/app/access', label: 'Who can see what', icon: ShieldCheck };
 
 const PAGE: Record<string, string> = {
   '/app': 'Dashboard', '/app/sources': 'Sources', '/app/reconstruct': 'Reconstruct', '/app/review': 'Review',
   '/app/conflicts': 'Conflicts', '/app/timeline': 'Timeline', '/app/view-as': 'View as', '/app/approval': 'Approval',
   '/app/share': 'Share', '/app/admin/users': 'People & groups', '/app/admin/projects': 'Projects',
   '/app/admin/audit': 'Audit log', '/app/admin/workspace': 'Workspace', '/app/admin/ai': 'AI', '/app/admin/connections': 'Connections', '/app/admin/billing': 'Billing', '/app/team': 'Team', '/app/risk': 'Knowledge risk', '/app/successors': 'Successors',
+  '/app/stale-docs': 'Stale docs', '/app/access': 'Who can see what',
 };
 
 /**
@@ -57,7 +60,7 @@ function setNavDir(to: string) {
   const target = order.indexOf(to);
   document.documentElement.dataset.navDir = from >= 0 && target >= 0 && target < from ? 'back' : 'forward';
 }
-const NAV_ORDER = () => [...NAV_MAIN.map(n => n.to), NAV_TEAM.to, NAV_RISK.to, ...NAV_ADMIN.map(n => n.to), ...TABS.map(t => t.to)];
+const NAV_ORDER = () => [...NAV_MAIN.map(n => n.to), NAV_TEAM.to, NAV_RISK.to, NAV_STALE.to, NAV_ACCESS.to, ...NAV_ADMIN.map(n => n.to), ...TABS.map(t => t.to)];
 
 function NavItem({ item, onClick }: { item: Nav; onClick?: () => void }) {
   const Icon = item.icon;
@@ -174,6 +177,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     '/app/review': summary ? (summary.byReviewState.PENDING ?? 0) + (summary.byReviewState.NEEDS_INFO ?? 0) : undefined,
     '/app/conflicts': summary?.byStatus.CONFLICTING,
   };
+  const { data: stale } = useStaleDocs(user?.appRole === 'lead' ? session?.project?.id : null);
+  const staleOpen = stale?.filter(f => f.status === 'OPEN').length ?? 0;
   return (
     <div className="flex h-full flex-col gap-1 p-4">
       <Link to="/app" className="px-2 pt-1 pb-4"><Logo animate /></Link>
@@ -195,6 +200,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             {NAV_MAIN.map(n => <NavItem key={n.to} item={{ ...n, count: counts[n.to] }} onClick={onNavigate} />)}
             {user?.appRole === 'lead' && <NavItem item={NAV_TEAM} onClick={onNavigate} />}
             {user?.appRole === 'lead' && <NavItem item={NAV_RISK} onClick={onNavigate} />}
+            {user?.appRole === 'lead' && <NavItem item={{ ...NAV_STALE, count: staleOpen || undefined }} onClick={onNavigate} />}
+            {user?.appRole === 'lead' && <NavItem item={NAV_ACCESS} onClick={onNavigate} />}
           </>
         )}
         {canAdmin && (
@@ -363,7 +370,7 @@ export function AppShell() {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const project = session?.project?.name ?? session?.workspace.name ?? 'Workspace';
-  const inHandover = !['/app', '/app/team', '/app/risk'].includes(pathname) && !pathname.startsWith('/app/admin');
+  const inHandover = !['/app', '/app/team', '/app/risk', '/app/stale-docs', '/app/access'].includes(pathname) && !pathname.startsWith('/app/admin');
   const crumbs = [project, ...(inHandover && session?.handover ? ['Handover · ' + session.handover.departingName] : []), PAGE[pathname] ?? 'Baton'];
   return (
     <div className="flex min-h-dvh">

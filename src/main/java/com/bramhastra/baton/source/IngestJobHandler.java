@@ -41,10 +41,12 @@ public class IngestJobHandler implements JobHandler {
     private final TransactionTemplate tx;
     private final AuditService audit;
     private final SyncService sync;
+    private final com.bramhastra.baton.staleness.StalenessService staleness;
 
     public IngestJobHandler(SourceRepository sources, List<SourceConnector> connectors, Redactor redactor,
                             Chunker chunker, Embedder embedder, CryptoService crypto, TransactionTemplate tx,
-                            AuditService audit, SyncService sync) {
+                            AuditService audit, SyncService sync, com.bramhastra.baton.staleness.StalenessService staleness) {
+        this.staleness = staleness;
         this.sources = sources;
         this.connectors = connectors;
         this.redactor = redactor;
@@ -155,6 +157,13 @@ public class IngestJobHandler implements JobHandler {
         }
         sources.markReady(source.id(), docs.size(), chunks, redactions);
         sources.markChanged(source.id(), sourceHash);
+        // New code changes or new docs: check the project's documentation against them again.
+        try {
+            staleness.scan(source.projectId());
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(IngestJobHandler.class)
+                    .warn("Staleness scan failed: {}", com.bramhastra.baton.common.SafeLog.describe(e));
+        }
         if (change != null && change.total() > 0) {
             sync.onChanged(source, change);
         } else if (scheduled) {

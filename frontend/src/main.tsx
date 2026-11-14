@@ -17,6 +17,7 @@ import Timeline from '@/pages/lead/Timeline';
 import ViewAs from '@/pages/lead/ViewAs';
 import { Approval, Share } from '@/pages/lead/ApprovalShare';
 import { RiskRadar, Successors } from '@/pages/lead/Insights';
+import { AccessPage, StaleDocs } from '@/pages/lead/Governance';
 import ExitInterview from '@/pages/leaver/ExitInterview';
 import { ChecklistPage, Ownership, RecipientTimeline, StartHere } from '@/pages/recipient/RecipientPages';
 import { AskPage } from '@/pages/recipient/AskPage';
@@ -146,6 +147,8 @@ createRoot(document.getElementById('root')!).render(
               <Route path="team" element={<RequireRole roles={['lead']}><TeamPage /></RequireRole>} />
               <Route path="risk" element={<RequireRole roles={['lead']}><RiskRadar /></RequireRole>} />
               <Route path="successors" element={<RequireRole roles={['lead']}><Successors /></RequireRole>} />
+              <Route path="stale-docs" element={<RequireRole roles={['lead']}><StaleDocs /></RequireRole>} />
+              <Route path="access" element={<RequireRole roles={['lead']}><AccessPage /></RequireRole>} />
               <Route path="admin/users" element={<RequireAdmin><UsersGroups /></RequireAdmin>} />
               <Route path="admin/projects" element={<RequireAdmin><ProjectsPage /></RequireAdmin>} />
               <Route path="admin/audit" element={<RequireAdmin><AuditLog /></RequireAdmin>} />

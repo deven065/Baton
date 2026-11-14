@@ -5,7 +5,7 @@ import { SensitivityChip } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/form';
 import { Banner, Card, EvidenceQuote, Progress, QueryState, StatusCircle } from '@/components/ui/misc';
-import { evidenceLabel, sens, useAnswerGapLive, useClaim, useGapList, type GapDto } from '@/data/live';
+import { evidenceLabel, interviewOrder, sens, useAnswerGapLive, useClaim, useGapList, type GapDto } from '@/data/live';
 import { useSession } from '@/lib/auth';
 import { ApiError } from '@/lib/http';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,8 @@ const KIND: Record<GapDto['kind'], { label: string; why: string }> = {
   CONFLICT: { label: 'Conflict', why: 'Two sources disagree. Your answer decides which one is current.' },
   MISSING_CHECKLIST: { label: 'Checklist', why: 'Every handover should cover this, and no source does.' },
   OTHER: { label: 'Question from the lead', why: 'Your project lead asked this while reviewing.' },
+  FOLLOW_UP: { label: 'Follow-up', why: 'Baton’s interviewer read your last answer and needs one more detail so the next person can act on it.' },
+  STALE_DOC: { label: 'Outdated document', why: 'A document still describes something that a later code change renamed, replaced or removed.' },
 };
 // Client-side hint only; the server redacts personal data and refuses keys and passwords.
 const SECRET = /(api[_-]?key|password|passwd|secret|token)\s*[:=]|sk-[a-z0-9]{12,}|AKIA[0-9A-Z]{16}/i;
@@ -24,7 +26,8 @@ const open = (g: GapDto) => g.status === 'OPEN' || g.status === 'UNANSWERED';
 export default function ExitInterview() {
   const { handover } = useSession();
   const q = useGapList(handover?.id);
-  const gaps = [...(q.data ?? [])].sort((a, b) => a.priority - b.priority);
+  // Follow-ups from the interviewer come straight after the answer that prompted them.
+  const gaps = interviewOrder([...(q.data ?? [])].sort((a, b) => a.priority - b.priority));
   const answer = useAnswerGapLive(handover?.id);
   const [viewId, setViewId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -63,7 +66,7 @@ export default function ExitInterview() {
             {gaps.map((g, i) => {
               const on = g.id === view?.id;
               return (
-                <button key={g.id} type="button" onClick={() => { setViewId(g.id); answer.reset(); }} aria-current={on ? 'step' : undefined} className={cn('flex items-center gap-2.5 rounded-lg p-2.5 text-left cursor-pointer', on ? 'bg-card ring-[1.5px] ring-brand-600' : 'hover:bg-card')}>
+                <button key={g.id} type="button" onClick={() => { setViewId(g.id); answer.reset(); }} aria-current={on ? 'step' : undefined} className={cn('flex items-center gap-2.5 rounded-lg p-2.5 text-left cursor-pointer', g.parentId && 'ml-5', on ? 'bg-card ring-[1.5px] ring-brand-600' : 'hover:bg-card')}>
                   <StatusCircle state={open(g) ? 'todo' : g.status === 'SKIPPED' ? 'warn' : 'done'} size={20} />
                   <span className="min-w-0">
                     <span className={cn('line-clamp-2 block text-small font-medium', open(g) && !on ? 'text-ink-500' : 'text-ink-900')}>{i + 1}. {g.question}</span>
@@ -113,12 +116,18 @@ export default function ExitInterview() {
 }
 
 function Why({ gap }: { gap: GapDto }) {
-  const claim = useClaim(gap.kind === 'CONFLICT' ? null : gap.claimId);
+  const claim = useClaim(gap.kind === 'CONFLICT' || gap.kind === 'FOLLOW_UP' ? null : gap.claimId);
   const ev = claim.data?.evidence[0];
   return (
     <div className="flex flex-col gap-2.5 rounded-xl bg-missing-bg p-4">
       <p className="flex items-center gap-2 text-small font-medium text-missing"><Info className="size-3.5" aria-hidden />Why Baton is asking{claim.data && <SensitivityChip level={sens(claim.data.sensitivity)} />}</p>
       <p className="text-small">{KIND[gap.kind].why}</p>
+      {gap.kind === 'FOLLOW_UP' && (
+        <p className="text-caption text-ink-700">
+          {gap.followUpReason ? <>Missing from your last answer: <strong>{gap.followUpReason}</strong>. </> : null}
+          Asked by {gap.followUpBy === 'ai' ? 'the AI interviewer' : 'Baton’s built-in interviewer'}.
+        </p>
+      )}
       {ev && <EvidenceQuote source={evidenceLabel(ev)} quote={`“${ev.quote}”`} />}
     </div>
   );

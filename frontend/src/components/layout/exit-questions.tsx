@@ -3,12 +3,13 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/form';
 import { Card, CardHeader } from '@/components/ui/misc';
-import { useAddQuestion, useGapList, useRemoveQuestion, type GapDto } from '@/data/live';
+import { interviewOrder, useAddQuestion, useGapList, useRemoveQuestion, type GapDto } from '@/data/live';
 import { ApiError } from '@/lib/http';
 import { cn } from '@/lib/utils';
 
 const KIND_LABEL: Record<GapDto['kind'], string> = {
   MISSING_OWNER: 'Owner or access', MISSING_EVIDENCE: 'Missing evidence', CONFLICT: 'Conflict', MISSING_CHECKLIST: 'Checklist', OTHER: 'Question',
+  FOLLOW_UP: 'Interviewer follow-up', STALE_DOC: 'Outdated document',
 };
 const open = (g: GapDto) => g.status === 'OPEN' || g.status === 'UNANSWERED';
 
@@ -24,7 +25,7 @@ export function ExitQuestions({ handoverId, leaverName }: { handoverId?: string 
   const [text, setText] = useState('');
   const [all, setAll] = useState(false);
   if (!handoverId) return null;
-  const list = gaps.data ?? [];
+  const list = interviewOrder(gaps.data ?? []);
   const shown = all ? list : list.slice(0, 6);
   const err = add.error instanceof ApiError ? add.error : null;
   const fieldError = (err?.details as Record<string, string> | undefined)?.question;
@@ -54,7 +55,7 @@ export function ExitQuestions({ handoverId, leaverName }: { handoverId?: string 
 
       <ul className="flex flex-col divide-y divide-line" aria-label="Questions">
         {shown.map(g => (
-          <li key={g.id} className="flex items-start gap-3 py-2.5">
+          <li key={g.id} className={cn('flex items-start gap-3 py-2.5', g.parentId && 'pl-6')}>
             {g.status === 'ANSWERED' ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-verified" aria-label="Answered" />
               : g.status === 'SKIPPED' ? <MinusCircle className="mt-0.5 size-4 shrink-0 text-inferred" aria-label="Skipped" />
                 : <CircleDashed className="mt-0.5 size-4 shrink-0 text-ink-400" aria-label="Waiting for an answer" />}

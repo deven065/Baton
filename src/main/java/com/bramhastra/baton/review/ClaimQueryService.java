@@ -159,15 +159,20 @@ public class ClaimQueryService {
                 WHERE g.handover_id = :h
                   AND (g.claim_id IS NULL OR %s)
                   AND (g.related_claim_id IS NULL OR %s)
+                  AND (g.stale_finding_id IS NULL OR EXISTS (
+                        SELECT 1 FROM stale_finding f JOIN chunk sk ON sk.id = f.chunk_id JOIN chunk sc ON sc.id = f.change_chunk_id
+                        WHERE f.id = g.stale_finding_id AND %s AND %s))
                 ORDER BY CASE g.status WHEN 'OPEN' THEN 0 WHEN 'UNANSWERED' THEN 1 ELSE 2 END, g.priority,
                          CASE WHEN g.added_by IS NULL THEN 1 ELSE 0 END, g.created_at
-                """.formatted(visible.formatted("g.claim_id"), visible.formatted("g.related_claim_id")))
+                """.formatted(visible.formatted("g.claim_id"), visible.formatted("g.related_claim_id"),
+                        access.sqlPredicate("sk"), access.sqlPredicate("sc")))
                 .param("h", handoverId).params(access.sqlParams(viewer))
                 .query((rs, n) -> new GapView(rs.getObject("id", UUID.class), rs.getString("kind"),
                         rs.getString("question"), rs.getInt("priority"), rs.getString("status"),
                         rs.getObject("claim_id", UUID.class), rs.getObject("related_claim_id", UUID.class),
                         rs.getString("answer_text"), ts(rs.getTimestamp("answered_at")),
-                        rs.getObject("added_by") != null))
+                        rs.getObject("added_by") != null, rs.getObject("parent_id", UUID.class),
+                        rs.getString("follow_up_reason"), rs.getString("follow_up_by")))
                 .list();
     }
 
@@ -239,7 +244,9 @@ public class ClaimQueryService {
     }
 
     public record GapView(UUID id, String kind, String question, int priority, String status, UUID claimId,
-                          UUID relatedClaimId, String answer, Instant answeredAt, boolean custom) {
+                          UUID relatedClaimId, String answer, Instant answeredAt, boolean custom,
+                          /* AI interview mode: the question this follows up, why, and who asked ("ai" or "rules"). */
+                          UUID parentId, String followUpReason, String followUpBy) {
     }
 
     public record TimelineView(Instant at, String kind, String title, UUID claimId, String status) {

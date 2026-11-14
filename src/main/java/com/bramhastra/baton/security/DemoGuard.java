@@ -38,6 +38,8 @@ public class DemoGuard implements WebMvcConfigurer, HandlerInterceptor {
             new Rule("PATCH", Pattern.compile("/api/projects/[^/]+/members/[^/]+")),
             new Rule("DELETE", Pattern.compile("/api/projects/[^/]+/members/[^/]+")),
             new Rule("POST", Pattern.compile("/api/shares/[^/]+/revoke")),
+            // Who can see a source: one visitor making the restricted contract public would spoil "View as" for all.
+            new Rule("PATCH", Pattern.compile("/api/sources/[^/]+")),
             new Rule("*", Pattern.compile("/api/admin/(ai|integrations|workspace|billing)(/.*)?")));
 
     private static final UrlPathHelper PATHS = new UrlPathHelper();

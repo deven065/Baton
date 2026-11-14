@@ -52,11 +52,13 @@ public class SourceController {
     private final JdbcClient jdbc;
 
     private final BillingService billing;
+    private final SourceAccessService sourceAccess;
 
     public SourceController(SourceRepository sources, List<SourceConnector> connectors, JobRepository jobs,
                             CryptoService crypto, CurrentUserProvider currentUser, AccessPolicy access,
-                            AuditService audit, JdbcClient jdbc, BillingService billing) {
+                            AuditService audit, JdbcClient jdbc, BillingService billing, SourceAccessService sourceAccess) {
         this.billing = billing;
+        this.sourceAccess = sourceAccess;
         this.sources = sources;
         this.connectors = connectors;
         this.jobs = jobs;
@@ -187,21 +189,41 @@ public class SourceController {
         return sources.listDocuments(visible(sourceId).id());
     }
 
-    /** Turns automatic sync of a live source on or off. Lead only. */
+    /**
+     * Changes a source. Lead only. {@code autoSync} turns automatic sync of a live source on or off;
+     * {@code sensitivity} and {@code aclGroups} (team names) change who can see it, everywhere at once.
+     */
     @org.springframework.web.bind.annotation.PatchMapping("/sources/{sourceId}")
     public SourceView update(@PathVariable UUID sourceId, @RequestBody Map<String, Object> body) {
         CurrentUser me = currentUser.get();
         SourceRow s = visible(sourceId);
         access.requireLead(me, s.projectId());
-        if (!s.type().isLive()) {
-            throw new ApiException(ErrorCode.INVALID_TRANSITION, "Only live sources (GitHub, Slack, Google Drive, Jira) can sync automatically");
+        Map<String, Object> b = body == null ? Map.of() : body;
+        boolean accessChange = b.containsKey("sensitivity") || b.containsKey("aclGroups");
+        if (!b.containsKey("autoSync") && !accessChange) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, "Request validation failed",
+                    Map.of("body", "Send autoSync, sensitivity or aclGroups"));
         }
-        if (!(body.get("autoSync") instanceof Boolean on)) {
-            throw new ApiException(ErrorCode.VALIDATION_FAILED, "Request validation failed", Map.of("autoSync", "true or false"));
+        if (b.containsKey("autoSync")) {
+            if (!s.type().isLive()) {
+                throw new ApiException(ErrorCode.INVALID_TRANSITION, "Only live sources (GitHub, Slack, Google Drive, Jira) can sync automatically");
+            }
+            if (!(b.get("autoSync") instanceof Boolean on)) {
+                throw new ApiException(ErrorCode.VALIDATION_FAILED, "Request validation failed", Map.of("autoSync", "true or false"));
+            }
+            sources.setAutoSync(s.id(), on);
+            audit.record(me.id(), on ? "SOURCE_AUTO_SYNC_ON" : "SOURCE_AUTO_SYNC_OFF", "source", s.id(), s.projectId(), Map.of());
         }
-        sources.setAutoSync(s.id(), on);
-        audit.record(me.id(), on ? "SOURCE_AUTO_SYNC_ON" : "SOURCE_AUTO_SYNC_OFF", "source", s.id(), s.projectId(), Map.of());
+        if (accessChange) {
+            s = sourceAccess.change(me, sources.findById(s.id()).orElseThrow(), b.get("sensitivity"), b.get("aclGroups"));
+        }
         return SourceView.of(sources.findById(s.id()).orElseThrow());
+    }
+
+    /** Who on the project can see which source, and why not. Lead only. */
+    @GetMapping("/projects/{projectId}/access")
+    public SourceAccessService.AccessMap accessMap(@PathVariable UUID projectId) {
+        return sourceAccess.map(currentUser.get(), projectId);
     }
 
     /** Re-sync a live source (GitHub, Slack, Google Drive, Jira). Uploaded files are re-synced by uploading again. */

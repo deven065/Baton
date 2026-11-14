@@ -121,8 +121,30 @@ source to members of those groups.
 - **Conflicts**: side-by-side view of sources that disagree; the lead picks the winner with a reason.
 - **Timeline**: decisions and changes in date order.
 - **View as**: preview exactly what a given recipient would see.
-- **Exit interview**: the person leaving answers questions; answers are redacted, refused if they contain keys or
-  passwords, and become `TESTIMONY` evidence.
+- **Exit interview (AI interview mode)**: the person leaving answers questions Baton wrote from the gaps in the claim
+  graph (conflicts, work with no owner, critical claims without proof, standard topics nobody covered, documents a
+  later code change made stale) plus any the lead adds. Answers are redacted, refused if they contain keys or
+  passwords, and become `TESTIMONY` evidence. After each answer an **interviewer** reads it and, when it leaves the
+  next person unable to act (no named owner, nowhere to check, no date for a change, unsure wording, steps missing),
+  asks **one targeted follow-up**, shown straight after with what was missing. A language model writes the follow-up
+  when the workspace has one (prompt `interview.v1`); otherwise, or if the model fails, built-in rules do. The answer
+  is redacted before the model sees it and wrapped as data; the follow-up is checked before it is shown (one short
+  question, not a repeat, never asking for a secret). One level deep, one per question, at most 8 per handover.
+- **Stale docs** (`/app/stale-docs`): documents that still describe something a later code change renamed, replaced,
+  removed or upgraded. Code changes come from commit messages (the commit log a GitHub source keeps, or an uploaded
+  `git log --date=iso --pretty="%h %ad %an: %s"`) and closed pull requests: "Rename DATABASE_URL to DB_URL", "Replace
+  Firebase with OneSignal", "Remove /api/v1/export", "Upgrade to Java 21". A passage is flagged when it still uses the
+  old identifier (not the new one) or an older version and was not written after the change; mentions that already
+  say a thing is not used ("instead of Firebase") are skipped. Plain rules, no AI: every finding points at one line of
+  the document and one commit or pull request. Checked after every source read and before every reconstruction; the
+  lead marks each finding **Out of date** or **Still correct** (kept across re-reads), and open findings become exit
+  questions (at most 3, only ones the person leaving is cleared for).
+- **Who can see what** (`/app/access`): per-team access control. Each source has a level and, optionally, the teams
+  allowed to see it. The page is a matrix of the project's people against its sources with the reason for every
+  "cannot see" ("needs Restricted clearance and is only for operations"). The lead can change a source's level and
+  teams; the change applies at once to its documents, passages, search and every claim built on it (claims are
+  re-scored to stay as strict as their strictest evidence), is audited as `SOURCE_ACCESS_CHANGED`, and is refused if
+  it would lock the lead out. Approved versions already shared keep their snapshot. Turned off in the shared demo.
 - **Approval gate**: the server checks the handover before it can be frozen (see §5).
 - **Versions and diff**: every approval creates a numbered version with a SHA-256 hash; compare any version with
   the handover as it is now.
@@ -724,6 +746,11 @@ All paths start with `/api`. Everything needs `Authorization: Bearer <token>` ex
 | GET | `/projects/{id}/room/events` | member | Server-sent events: `hello` (who is on the call), `chat`, `call-joined`, `call-left`, `signal` |
 | POST | `/projects/{id}/room/call/join` · `/leave` | member | Join returns who is already on the call, the cap (4) and the STUN/TURN servers; 409 when full |
 | POST | `/projects/{id}/room/call/signal` | member on the call | Relays `{to, kind: offer\|answer\|ice, data}` to another person on the same call; 404 otherwise |
+| GET | `/projects/{id}/staleness` | lead | Stale-doc findings the lead is cleared for (document line, term, replacement, kind, commit or PR, date, status) |
+| POST | `/projects/{id}/staleness/scan` | lead | Check again now → `{open, findings}` |
+| POST | `/staleness/{findingId}/decision` | lead | `{status: CONFIRMED\|DISMISSED\|OPEN}` (out of date, still correct, undo) |
+| GET | `/projects/{id}/access` | lead | `{sources, people, teams}`: who can see which source, with the reason when not |
+| PATCH | `/sources/{id}` | lead | `{autoSync?}`, `{sensitivity?, aclGroups?}` (who can see it; applied everywhere and audited) |
 
 ### Handovers and review
 | Method | Path | Who | Notes |
@@ -739,7 +766,7 @@ All paths start with `/api`. Everything needs `Authorization: Bearer <token>` ex
 | GET | `/claims/{id}/revisions` | lead | |
 | POST | `/claims/{id}/resolve-conflict` | lead | `{otherClaimId, reason}` |
 | GET | `/handovers/{id}/gaps` · `/timeline` · `/summary` | lead, leaver | |
-| POST | `/gaps/{id}/answer` | leaver | `{answer, sensitivity?, owner?}` |
+| POST | `/gaps/{id}/answer` | leaver | `{answer, sensitivity?, owner?}`; the interviewer may then add one `FOLLOW_UP` question (`parentId`, `followUpReason`, `followUpBy: ai\|rules`) |
 | POST | `/gaps/{id}/skip` | lead, leaver | `{reason?}` |
 | GET | `/handovers/{id}/preview?as={userId}` | lead | View as a recipient |
 
@@ -833,7 +860,7 @@ decides each person's role. The Figma plugin that draws the product design (file
 ## 19. Testing
 
 ```bash
-./mvnw test          # 134 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
+./mvnw test          # 143 tests; needs Docker (Testcontainers starts a real pgvector Postgres)
 cd frontend && npx tsc -b --noEmit && npm run build
 ```
 
@@ -882,8 +909,9 @@ dashboard", "renewal is due on 2026-12-01"); a model is expected to find them.
 |---|---|
 | Evidence | `QuoteMatcherTest`, `ClaimScorerTest` |
 | Ingest | `RedactorTest`, `ChunkerTest`, `ConnectorTest`, `SourceIngestApiTest`, `TranscriptTest`, `RecordingApiTest` (fake Whisper and chat model: transcription, speakers, playback, delete audio, timestamps on evidence) |
-| Identity and access | `IdentityApiTest`, `AccessPolicyTest`, `PasswordResetApiTest`, `RbacMatrixTest` (every endpoint × every role) |
-| Reconstruction and review | `OfflineExtractorTest`, `ReconstructApiTest`, `ReviewApiTest`, `ConflictDecisionTest` (a conflict decision survives re-runs) |
+| Identity and access | `IdentityApiTest`, `AccessPolicyTest`, `PasswordResetApiTest`, `RbacMatrixTest` (every endpoint × every role), `SourceAccessApiTest` (who-can-see-what map with reasons; changing a source's level and teams reaches every passage and claim; bad teams, unknown levels and lead lock-out refused) |
+| Reconstruction and review | `OfflineExtractorTest`, `ReconstructApiTest`, `ReviewApiTest`, `ConflictDecisionTest` (a conflict decision survives re-runs), `LeadQuestionsTest`, `InterviewModeTest` (a vague answer gets one targeted follow-up placed next, a specific one none, no follow-up to a follow-up, kept across re-runs; model follow-ups asking for secrets, repeats or non-questions refused) |
+| Staleness | `StaleDetectorTest` (renames, replacements, removals and upgrades read from commits; ordinary commits, updated or newer docs, "instead of" mentions and longer identifiers left alone; GitHub and `git log` formats), `StalenessApiTest` (docs and a commit log read, findings listed, lead-only decisions that survive a re-scan, exit questions about stale docs) |
 | Workspaces and admin | `WorkspaceApiTest`, `DatabaseUrlTest`, `CompanyAdminApiTest`, `HardeningApiTest`, `SafeLogTest` |
 | Handover lifecycle | `HandoverStateMachineTest`, `LifecycleApiTest`, `HandoverFeaturesApiTest` |
 | AI, connectors, billing | `AiSettingsApiTest`, `ConnectorsAndBillingApiTest` (fake AI, Slack, Google and Razorpay servers), `OAuthApiTest` (one-click connections against fake Slack, GitHub and Google: forged, expired and wrong-tool states refused), `AutoSyncApiTest` (fake Jira: first read, unchanged check, new evidence, approved handover left alone, failing read, switch off) |

@@ -50,12 +50,17 @@ public class GapStage implements PipelineStage {
             new Topic("What is the next deadline, and what must be done before it?",
                     c -> c.attr("dueDate") != null || (c.type().equals("DECISION") && matches(c, "launch|deadline|release|demo")), 2));
 
+    /** At most this many outdated-document questions, so they never crowd out the handover's own gaps. */
+    static final int MAX_STALE_QUESTIONS = 3;
+
     private final ClaimRepository claims;
     private final JdbcClient jdbc;
+    private final com.bramhastra.baton.staleness.StalenessService staleness;
 
-    public GapStage(ClaimRepository claims, JdbcClient jdbc) {
+    public GapStage(ClaimRepository claims, JdbcClient jdbc, com.bramhastra.baton.staleness.StalenessService staleness) {
         this.claims = claims;
         this.jdbc = jdbc;
+        this.staleness = staleness;
     }
 
     @Override
@@ -71,7 +76,8 @@ public class GapStage implements PipelineStage {
     @Override
     public void execute(PipelineContext ctx) {
         UUID h = ctx.handover().id();
-        jdbc.sql("DELETE FROM gap_question WHERE handover_id = :h AND status IN ('OPEN', 'UNANSWERED') AND kind <> 'OTHER'")
+        // The lead's own questions and the interviewer's follow-ups are kept; generated ones are written again.
+        jdbc.sql("DELETE FROM gap_question WHERE handover_id = :h AND status IN ('OPEN', 'UNANSWERED') AND kind NOT IN ('OTHER', 'FOLLOW_UP')")
                 .param("h", h).update();
         Set<String> alreadyAnswered = new HashSet<>(jdbc.sql(
                 "SELECT question FROM gap_question WHERE handover_id = :h").param("h", h).query(String.class).list());
@@ -135,6 +141,19 @@ public class GapStage implements PipelineStage {
             }
         }
 
+        // 5. Documentation that a later code change made out of date (only what the person leaving may see)
+        Map<String, UUID> staleIds = new java.util.HashMap<>();
+        try {
+            staleness.scan(ctx.handover().projectId());
+            for (var f : staleness.openFor(ctx.handover().projectId(), ctx.handover().departingUserId(), MAX_STALE_QUESTIONS)) {
+                String q = staleQuestion(f);
+                staleIds.put(q, f.id());
+                questions.add(new Q("STALE_DOC", null, null, q, 2));
+            }
+        } catch (RuntimeException e) {
+            ctx.warn("Could not check documents against recent code changes: " + e.getMessage());
+        }
+
         String status = "SUDDEN".equals(ctx.handover().scenario()) ? "UNANSWERED" : "OPEN";
         List<Q> chosen = questions.stream()
                 .filter(q -> !alreadyAnswered.contains(q.question()))
@@ -143,15 +162,27 @@ public class GapStage implements PipelineStage {
                 .toList();
         for (Q q : chosen) {
             jdbc.sql("""
-                    INSERT INTO gap_question (handover_id, claim_id, related_claim_id, kind, question, priority, status)
-                    VALUES (:h, :c, :r, :k, :q, :p, :s)
+                    INSERT INTO gap_question (handover_id, claim_id, related_claim_id, kind, question, priority, status, stale_finding_id)
+                    VALUES (:h, :c, :r, :k, :q, :p, :s, :f)
                     """)
                     .param("h", h).param("c", q.claimId()).param("r", q.relatedClaimId()).param("k", q.kind())
                     .param("q", q.question().length() > 1000 ? q.question().substring(0, 997) + "..." : q.question())
-                    .param("p", q.priority()).param("s", status)
+                    .param("p", q.priority()).param("s", status).param("f", staleIds.get(q.question()))
                     .update();
         }
         ctx.count("gapQuestions", chosen.size());
+    }
+
+    static String staleQuestion(com.bramhastra.baton.staleness.StalenessService.FindingView f) {
+        String what = switch (f.kind()) {
+            case "RENAMED" -> "renamed it to \"" + f.replacement() + "\"";
+            case "REPLACED" -> "replaced it with \"" + f.replacement() + "\"";
+            case "VERSION" -> "moved to " + f.replacement();
+            default -> "removed it";
+        };
+        return "\"" + f.docTitle() + "\" still says \"" + f.term() + "\", but " + f.changeRef() + " on "
+                + f.changeAt().atZone(ZoneOffset.UTC).toLocalDate() + " " + what
+                + ". Is the document out of date, and what should it say now?";
     }
 
     private static String cite(ClaimRepository.ClaimRow c, Map<UUID, List<ClaimRepository.EvidenceRow>> evidence) {

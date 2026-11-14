@@ -54,10 +54,12 @@ public class TestimonyService {
     private final ClaimQueryService query;
     private final AuditService audit;
     private final ObjectMapper json;
+    private final Interviewer interviewer;
 
     public TestimonyService(JdbcClient jdbc, HandoverAccess handoverAccess, Redactor redactor, CryptoService crypto,
                             Embedder embedder, ScoreStage scorer, ClaimReviewService review, ClaimQueryService query,
-                            AuditService audit, ObjectMapper json) {
+                            AuditService audit, ObjectMapper json, Interviewer interviewer) {
+        this.interviewer = interviewer;
         this.jdbc = jdbc;
         this.handoverAccess = handoverAccess;
         this.redactor = redactor;
@@ -180,6 +182,69 @@ public class TestimonyService {
                 Map.of("kind", g.kind(), "sensitivity", sens.name(), "redactions", redacted.redactions().size()));
         return query.gaps(h.id(), me).stream().filter(x -> x.id().equals(g.id())).findFirst().orElseThrow();
     }
+
+    static final int MAX_FOLLOW_UPS = 8;
+
+    private record Answered(UUID handoverId, String kind, String question, String answer, String status, UUID parentId,
+                            UUID claimId, UUID relatedClaimId, int priority) {
+    }
+
+    /**
+     * AI interview mode. Once an answer is saved, the interviewer reads it and, when it leaves the next person unable to
+     * act, asks one targeted follow-up. It goes straight after the question it follows, so it is the next thing the
+     * person leaving sees. One level only (a follow-up gets none), one per question, at most {@value #MAX_FOLLOW_UPS} per
+     * handover, so the interview stays short. Not transactional on purpose: the model call must not hold a database
+     * connection, and a unique index keeps it to one follow-up even if two requests race.
+     */
+    public java.util.Optional<ClaimQueryService.GapView> followUp(CurrentUser me, UUID answeredGapId) {
+        Answered a = jdbc.sql("""
+                SELECT handover_id, kind, question, answer_text, status, parent_id, claim_id, related_claim_id, priority
+                FROM gap_question WHERE id = :id
+                """).param("id", answeredGapId)
+                .query((rs, n) -> new Answered(rs.getObject(1, UUID.class), rs.getString(2), rs.getString(3), rs.getString(4),
+                        rs.getString(5), rs.getObject(6, UUID.class), rs.getObject(7, UUID.class), rs.getObject(8, UUID.class),
+                        rs.getInt(9)))
+                .optional().orElse(null);
+        if (a == null || !"ANSWERED".equals(a.status()) || a.parentId() != null || "FOLLOW_UP".equals(a.kind())
+                || a.answer() == null) {
+            return java.util.Optional.empty();
+        }
+        Handover h = handoverAccess.requireWorkspace(me, a.handoverId());
+        int asked = jdbc.sql("SELECT count(*) FROM gap_question WHERE handover_id = :h AND kind = 'FOLLOW_UP'")
+                .param("h", h.id()).query(Integer.class).single();
+        if (asked >= MAX_FOLLOW_UPS) {
+            return java.util.Optional.empty();
+        }
+        var fu = interviewer.followUp(a.kind(), a.question(), WHY.getOrDefault(a.kind(), ""), a.answer());
+        if (fu.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        // Whatever the model wrote is redacted like any other text before it is stored.
+        String q = redactor.redact(fu.get().question()).text();
+        UUID id = jdbc.sql("""
+                INSERT INTO gap_question (handover_id, claim_id, related_claim_id, kind, question, priority, status,
+                                          parent_id, follow_up_reason, follow_up_by)
+                VALUES (:h, :c, :r, 'FOLLOW_UP', :q, :p, 'OPEN', :parent, :why, :by)
+                ON CONFLICT (parent_id) WHERE parent_id IS NOT NULL DO NOTHING
+                RETURNING id
+                """).param("h", h.id()).param("c", a.claimId()).param("r", a.relatedClaimId()).param("q", q)
+                .param("p", a.priority()).param("parent", answeredGapId).param("why", truncate(fu.get().reason(), 300))
+                .param("by", fu.get().askedBy()).query(UUID.class).optional().orElse(null);
+        if (id == null) {
+            return java.util.Optional.empty();
+        }
+        audit.record(me.id(), "GAP_FOLLOW_UP", "gap_question", id, h.projectId(),
+                Map.of("askedBy", fu.get().askedBy(), "parentKind", a.kind()));
+        return query.gaps(h.id(), me).stream().filter(x -> x.id().equals(id)).findFirst();
+    }
+
+    private static final Map<String, String> WHY = Map.of(
+            "MISSING_OWNER", "No source names who owns this or how it is handed over.",
+            "MISSING_EVIDENCE", "This came up in the sources but nothing confirms it.",
+            "CONFLICT", "Two sources disagree; the answer decides which one is current.",
+            "MISSING_CHECKLIST", "Every handover should cover this, and no source does.",
+            "STALE_DOC", "A document still describes something a later code change altered.",
+            "OTHER", "The project lead asked this.");
 
     static final int MAX_CUSTOM_QUESTIONS = 50;
 

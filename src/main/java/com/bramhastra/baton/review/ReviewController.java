@@ -94,7 +94,16 @@ public class ReviewController {
     /** Exit interview: only the departing member answers. */
     @PostMapping("/gaps/{gapId}/answer")
     public ClaimQueryService.GapView answer(@PathVariable UUID gapId, @RequestBody TestimonyService.Answer req) {
-        return testimony.answer(currentUser.get(), gapId, req);
+        var me = currentUser.get();
+        ClaimQueryService.GapView answered = testimony.answer(me, gapId, req);
+        // AI interview mode: the answer is saved first; a follow-up, if the interviewer has one, comes after.
+        try {
+            testimony.followUp(me, gapId);
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(ReviewController.class)
+                    .warn("No follow-up for this answer: {}", com.bramhastra.baton.common.SafeLog.describe(e));
+        }
+        return answered;
     }
 
     @PostMapping("/gaps/{gapId}/skip")

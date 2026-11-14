@@ -67,6 +67,10 @@ class DemoGuardTest {
                 .andExpect(status().isForbidden());
         mvc.perform(post("/api/admin/workspace/disconnect").header("Authorization", admin).contentType(json).content("{}"))
                 .andExpect(status().isForbidden());
+        // Who can see a source stays as shipped, so "View as" keeps working for the next visitor.
+        mvc.perform(patch("/api/sources/" + java.util.UUID.randomUUID()).header("Authorization", login("neha@annapurna.test"))
+                        .contentType(json).content("{\"sensitivity\":\"PUBLIC\"}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error").value("DEMO_LOCKED"));
 
         // Path tricks do not get around it.
         int tricked = mvc.perform(post("/api/me//password").header("Authorization", login("rahul@annapurna.test"))
