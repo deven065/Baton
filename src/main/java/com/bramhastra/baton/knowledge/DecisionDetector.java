@@ -179,6 +179,9 @@ public final class DecisionDetector {
      * so they only count when a person or the team is the one doing it.
      */
     private static boolean lacksActor(Cue c, String text, int start) {
+        if (c.verb().equals("drop") && start > 0 && text.substring(start).matches("(?is)^\\S+\\s+with\\b.*")) {
+            return true; // "passwords replaced with placeholders": a description, not a choice
+        }
         if (!c.verb().equals("approve") && !c.verb().equals("use")) {
             return false;
         }

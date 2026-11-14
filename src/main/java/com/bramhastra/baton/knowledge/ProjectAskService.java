@@ -382,7 +382,30 @@ public class ProjectAskService {
         if (!root.path("found").asBoolean(false) || text.isEmpty() || !cited) {
             throw new IllegalStateException("Model gave no cited answer");
         }
+        String stray = ungrounded(text, user.toString());
+        if (stray != null) {
+            throw new IllegalStateException("Model named something the sources do not contain: " + stray);
+        }
         return text.length() > 1200 ? text.substring(0, 1200) + "…" : text;
+    }
+
+    private static final java.util.regex.Pattern NAMED = java.util.regex.Pattern.compile("(?<![.!?]\\s)(?<!^)\\b[A-Z][A-Za-z0-9+#]{2,}\\b|\\b\\d[\\d,.]*\\d\\b");
+
+    /**
+     * Code, not the model, decides that an answer stays inside its sources: any capitalised name or number in the answer
+     * that is not in the facts or the question (a tool the sources never mention, an invented date) makes the answer fall back
+     * to the quoted passage instead.
+     */
+    static String ungrounded(String answer, String context) {
+        String haystack = context.toLowerCase(Locale.ROOT);
+        java.util.regex.Matcher m = NAMED.matcher(answer.replaceAll("\\[\\d+]", " "));
+        while (m.find()) {
+            String token = m.group().toLowerCase(Locale.ROOT);
+            if (!haystack.contains(token)) {
+                return m.group();
+            }
+        }
+        return null;
     }
 
     /** Who to ask when the sources are thin: the person who has written most about it, other than the asker. */

@@ -68,6 +68,8 @@ class DecisionDetectorTest {
         assertThat(detect("The lead shares the approved version with each recipient and role.")).isEmpty();
         assertThat(detect("Approve handover. The approved handover is frozen and signed.")).isEmpty();
         assertThat(detect("Approve claim proposes version 2.")).isEmpty();
+        assertThat(detect("Redaction Emails, phone numbers, API keys and passwords replaced with placeholders.")).isEmpty();
+        assertThat(detect("We replaced Jenkins with GitHub Actions because builds kept timing out.")).hasSize(1);
         assertThat(detect("Neha approved the Razorpay budget for the launch."))
                 .singleElement().satisfies(d -> assertThat(d.title()).containsIgnoringCase("razorpay"));
         assertThat(detect("We approved moving the vendor contract to the new plan.")).hasSize(1);

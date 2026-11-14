@@ -148,4 +148,13 @@ class KnowledgeUnitTest {
         assertThat(ProjectAskService.extractive(noWhy, true, "MEDIUM")).contains("record this decision but not the reason", "ask Neha");
         assertThat(ProjectAskService.extractive(noWhy, false, "MEDIUM")).doesNotContain("not the reason");
     }
+
+    @Test
+    void aModelAnswerThatNamesThingsTheSourcesDoNotContainIsRejected() {
+        String facts = "1. Transfer all project accounts and access before departure | accounts and access are transferred. "
+                + "Question: What must be transferred before Bhushan leaves?";
+        assertThat(ProjectAskService.ungrounded("Before Bhushan leaves, all project accounts and access must be handed over [1].", facts)).isNull();
+        assertThat(ProjectAskService.ungrounded("All accounts, including GitHub and Slack, must be handed over [1].", facts)).isEqualTo("GitHub");
+        assertThat(ProjectAskService.ungrounded("The handover is due on 2026-12-01 [1].", facts)).isNotNull();
+    }
 }
