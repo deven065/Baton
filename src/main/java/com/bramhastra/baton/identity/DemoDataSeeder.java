@@ -25,6 +25,7 @@ import com.bramhastra.baton.tenant.TenantRegistry;
  * All accounts are fictional test personas on the reserved .test domain.
  */
 @Component
+@org.springframework.core.annotation.Order(10)
 @ConditionalOnProperty(name = "baton.demo.seed", havingValue = "true")
 public class DemoDataSeeder implements ApplicationRunner {
 

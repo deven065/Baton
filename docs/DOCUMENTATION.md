@@ -647,6 +647,7 @@ All settings are environment variables (defaults in `src/main/resources/applicat
 | `DEMO_SEED` | `true` | Create the demo workspace data |
 | `DEMO_PASSWORD` | `annapurna-demo` | Password for every demo person |
 | `DEMO_LOCKED` | `true` | Refuse changes in the demo workspace that would break it for the next visitor |
+| `DEMO_SOURCES` | `true` | Load the twelve sample sources into an empty demo project so every screen has content (does nothing if the project already has sources) |
 | `EMBEDDINGS_ENABLED` | `true` | Local MiniLM embeddings (needs memory; `false` on the free Render plan → keyword search) |
 
 **AI**

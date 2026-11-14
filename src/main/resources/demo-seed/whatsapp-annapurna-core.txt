@@ -1,0 +1,11 @@
+08/10/2026, 20:58 - Messages and calls are end-to-end encrypted. No one outside of this chat can read them.
+08/10/2026, 20:58 - Neha Kulkarni created group "Annapurna Core"
+14/10/2026, 21:14 - Priya Sharma: We decided to use Cloudinary for menu photos instead of uploading them to our own server.
+14/10/2026, 21:16 - Arjun Mehta: makes sense
+14/10/2026, 21:20 - Arjun Mehta: <Media omitted>
+19/10/2026, 18:05 - Priya Sharma: The annapurna-canteen domain is on my personal card, it has to move to the club account before March.
+19/10/2026, 18:07 - Neha Kulkarni: noted, I'll ask the treasurer
+24/10/2026, 11:40 - Priya Sharma: To deploy: merge to main, then run the migrate job on Render.
+24/10/2026, 11:42 - Priya Sharma: sandbox key for testing is rzp_test_FAKEdemoKEY0123456789
+24/10/2026, 11:43 - Neha Kulkarni: please don't paste keys here
+02/11/2026, 13:10 - Priya Sharma: Contact for the canteen POS machine is Suresh at the counter, +91 91234 56789.
