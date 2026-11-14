@@ -1,19 +1,39 @@
-import { Check } from 'lucide-react';
-import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { Check, Eye, EyeOff } from 'lucide-react';
+import { forwardRef, useId, useState, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
+/** A text box. A password box gets an eye button at its right edge to show or hide what was typed. */
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }>(
-  ({ className, invalid, ...props }, ref) => (
-    <input
-      ref={ref}
-      className={cn(
-        'w-full rounded-lg border bg-card px-3 py-2.5 text-body text-ink-900 placeholder:text-ink-400 outline-none transition-colors',
-        invalid ? 'border-conflict' : 'border-line-strong focus:border-brand-600 focus:ring-3 focus:ring-brand-100',
-        className,
-      )}
-      {...props}
-    />
-  ),
+  ({ className, invalid, type, ...props }, ref) => {
+    const [shown, setShown] = useState(false);
+    const secret = type === 'password';
+    const box = (
+      <input
+        ref={ref}
+        type={secret && shown ? 'text' : type}
+        className={cn(
+          'w-full rounded-lg border bg-card px-3 py-2.5 text-body text-ink-900 placeholder:text-ink-400 outline-none transition-colors',
+          invalid ? 'border-conflict' : 'border-line-strong focus:border-brand-600 focus:ring-3 focus:ring-brand-100',
+          secret && 'pr-11',
+          className,
+        )}
+        {...props}
+      />
+    );
+    if (!secret) return box;
+    return (
+      <div className="relative">
+        {box}
+        <button
+          type="button" tabIndex={0} aria-label={shown ? 'Hide password' : 'Show password'} aria-pressed={shown} title={shown ? 'Hide password' : 'Show password'}
+          onClick={() => setShown(s => !s)}
+          className="absolute inset-y-0 right-0 grid w-11 place-items-center rounded-r-lg text-ink-500 hover:text-ink-900 cursor-pointer"
+        >
+          {shown ? <EyeOff className="size-[18px]" aria-hidden /> : <Eye className="size-[18px]" aria-hidden />}
+        </button>
+      </div>
+    );
+  },
 );
 Input.displayName = 'Input';
 
