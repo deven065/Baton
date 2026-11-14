@@ -379,20 +379,27 @@ public class ProjectAskService {
         }
         String text = root.path("answer").asString("").strip();
         boolean cited = false;
-        StringBuilder support = new StringBuilder(question);
+        StringBuilder listed = new StringBuilder(question);
         for (JsonNode n : root.path("cite")) {
             boolean ok = n.asInt() >= 1 && n.asInt() <= facts.size();
             cited |= ok;
             if (ok) {
-                support.append(' ').append(lines.get(n.asInt() - 1));
+                listed.append(' ').append(lines.get(n.asInt() - 1));
             }
         }
+        // What the answer itself points at is what it must rest on; the model's separate "cite" list can be broader.
+        StringBuilder support = new StringBuilder(question);
+        boolean pointed = false;
         java.util.regex.Matcher inText = java.util.regex.Pattern.compile("\\[(\\d{1,2})]").matcher(text);
         while (inText.find()) {
             int k = Integer.parseInt(inText.group(1));
             if (k >= 1 && k <= facts.size()) {
-                support.append(' ').append(lines.get(k - 1)); // a number written in the answer counts as cited too
+                support.append(' ').append(lines.get(k - 1));
+                pointed = true;
             }
+        }
+        if (!pointed) {
+            support = listed;
         }
         if (!root.path("found").asBoolean(false) || text.isEmpty() || !cited) {
             throw new IllegalStateException("Model gave no cited answer");
