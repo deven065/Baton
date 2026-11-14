@@ -349,8 +349,10 @@ public class ProjectAskService {
 
     private String withModel(String question, List<Fact> facts) {
         StringBuilder user = new StringBuilder("<facts>\n");
+        List<String> lines = new ArrayList<>();
         for (int i = 0; i < facts.size(); i++) {
             Fact f = facts.get(i);
+            int lineStart = user.length();
             user.append('[').append(i + 1).append("] ").append(f.kind()).append(": ").append(f.title());
             if (f.body() != null) {
                 user.append(" | ").append(f.kind().equals("DECISION") ? "why: " : "").append(f.body());
@@ -364,6 +366,7 @@ public class ProjectAskService {
             if (f.quote() != null) {
                 user.append(" | source says: \"").append(f.quote().replace("</facts", "</ facts")).append('"');
             }
+            lines.add(user.substring(lineStart));
             user.append('\n');
         }
         user.append("</facts>\n\nQuestion: ").append(question);
@@ -376,13 +379,25 @@ public class ProjectAskService {
         }
         String text = root.path("answer").asString("").strip();
         boolean cited = false;
+        StringBuilder support = new StringBuilder(question);
         for (JsonNode n : root.path("cite")) {
-            cited |= n.asInt() >= 1 && n.asInt() <= facts.size();
+            boolean ok = n.asInt() >= 1 && n.asInt() <= facts.size();
+            cited |= ok;
+            if (ok) {
+                support.append(' ').append(lines.get(n.asInt() - 1));
+            }
+        }
+        java.util.regex.Matcher inText = java.util.regex.Pattern.compile("\\[(\\d{1,2})]").matcher(text);
+        while (inText.find()) {
+            int k = Integer.parseInt(inText.group(1));
+            if (k >= 1 && k <= facts.size()) {
+                support.append(' ').append(lines.get(k - 1)); // a number written in the answer counts as cited too
+            }
         }
         if (!root.path("found").asBoolean(false) || text.isEmpty() || !cited) {
             throw new IllegalStateException("Model gave no cited answer");
         }
-        String stray = ungrounded(text, user.toString());
+        String stray = ungrounded(text, support.toString());
         if (stray != null) {
             throw new IllegalStateException("Model named something the sources do not contain: " + stray);
         }
