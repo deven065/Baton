@@ -10,11 +10,28 @@ allowed to see.
 
 Each company's data stays in **its own database**. Baton keeps only the workspace name and an encrypted way in.
 
-Team Bramhastra: Deven Rikame (lead, backend) · Bhushan Shinde (database, AI prompts) · Shawn Dmello (frontend, deployment)
+**Team Bramhastra**
 
-**Live:** https://baton-umber.vercel.app (pick a demo person on the sign-in page; workspace `demo`)
+| Member | Role |
+|---|---|
+| Deven Vinod Rikame (team leader) | Full Stack Development + Testing |
+| Shawn Sachin Dmello | Frontend, Docker and AI Prompts + Testing |
+| Bhushan Vivek Shinde | Database research and Project Testing |
+
+**Live:** https://batonteams.xyz (also at https://baton-umber.vercel.app). On the sign-in page, pick a demo person (workspace `demo`); there is nothing to type.
+The free API host sleeps when idle, so the first sign-in can take up to about a minute and a half.
+
+**Final report (PDF):** [docs/Baton_Updated_Proposal_Team_Bramhastra.pdf](docs/Baton_Updated_Proposal_Team_Bramhastra.pdf)
 
 **Full documentation:** [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)
+
+### Try it in five minutes
+
+1. Open https://batonteams.xyz and sign in as **Neha Kulkarni** (project lead): open **Review** (every claim shows its source quote), **Conflicts**, **Decisions**, **Experts**, **Knowledge risk**, **Stale docs**, and the **Team room** button.
+2. Sign out and sign in as **Priya Sharma** (the person leaving): answer one interview question.
+3. Sign in as **Arjun Mehta** (successor): read **Start here** and use **Ask the handover**.
+
+The demo workspace loads fourteen sample sources, a decision log, risk alerts, stale-document findings and a shared handover on start-up.
 
 ---
 
@@ -45,6 +62,14 @@ Trust rules the code enforces, not the AI:
 **Frontend:** React 18, TypeScript, Vite 5, Tailwind CSS 4.1, TanStack Query ·
 **AI:** any OpenAI-compatible API (Groq, OpenAI, OpenRouter) or a fully offline extractor ·
 **Hosting:** Render (API), Vercel (web app), Neon (Baton's home database), GitHub Actions
+
+## What is verified, and what is not
+
+Verified: 169 automated tests on every push; manual runs on the live site (sign-in for each role, GitHub and Slack
+connections, AI answers, test-mode payment, video calls between two browsers).
+Not verified: model recall and cost figures (offline rules only are published), a real Whisper transcription, video
+calls on real phones or across different networks. The production API runs in offline extraction mode until an AI key is
+set, and the free host sleeps when idle. The full list is in the final report, section "Known limitations".
 
 ## Run locally
 
