@@ -195,6 +195,11 @@ function CallView({ call, inCall, selfName, members, online }: { call: ReturnTyp
     document.addEventListener('fullscreenchange', on);
     return () => document.removeEventListener('fullscreenchange', on);
   }, []);
+  // When the call ends (you leave, the other person hangs up, or it drops) full screen ends too, so you land back on
+  // the team room instead of on a black full-screen page.
+  useEffect(() => {
+    if ((call.status === 'idle' || call.status === 'asking') && document.fullscreenElement) void document.exitFullscreen().catch(() => { /* already out */ });
+  }, [call.status]);
   const canFullscreen = typeof document !== 'undefined' && document.fullscreenEnabled === true;
   // The whole call goes full screen, not one person's picture: everyone stays visible, with yourself in a corner.
   const toggleFull = () => {
@@ -283,7 +288,7 @@ function CallView({ call, inCall, selfName, members, online }: { call: ReturnTyp
   }
   const tiles = call.remotes.length + 1;
   return (
-    <div ref={stage} className="flex min-h-0 flex-1 flex-col bg-ink-900">
+    <div key="live-call" ref={stage} className="flex min-h-0 flex-1 flex-col bg-ink-900">
       <p className="flex items-center gap-2 border-b border-white/10 px-3 py-1.5 text-caption text-ink-300">
         {call.peer ? <><Phone className="size-3.5" aria-hidden />Call with {first(call.peer.name)}</> : <><Users className="size-3.5" aria-hidden />Group call</>}
       </p>
