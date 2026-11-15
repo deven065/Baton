@@ -35,3 +35,6 @@ build/
 ### Local-only settings ###
 /config/
 __pycache__/
+
+# Local-only copies that contain sign-in details for judges
+submission-private/
