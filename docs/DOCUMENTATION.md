@@ -214,7 +214,7 @@ not on the project gets "not found").
   shares one bandwidth budget, incoming video has a small smoothing buffer, and set-up messages are applied one at a
   time per person. Echo and noise cancelling are on; two devices in one room should use headphones or mute one. Quality can be set from HD 720p up to **4K 2160p** and changed during the call;
   the call shows the size the camera is really sending, because 4K needs a 4K camera and a fast connection.
-  Microphone and camera can be switched off, and any incoming picture can go full screen.
+  Microphone and camera can be switched off. On phones and tablets a **switch camera** button swaps between the front and back camera without leaving the call (it shows only when the device has more than one camera). **Full screen** takes the whole call, not one person's picture: everyone stays visible, with yourself in a small window in the corner, as in Google Meet.
 - **How the call works**: browsers connect directly to each other (WebRTC), so the video never passes through Baton's
   servers; Baton only relays the small set-up messages, and only between two people who are both on the call. That
   is why a call costs the server almost nothing at any quality. Because every browser sends its picture to every

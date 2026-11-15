@@ -83,6 +83,8 @@ export function useCall(projectId: string | undefined, selfId: string | undefine
   const [sent, setSent] = useState<Sent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [facing, setFacing] = useState<'user' | 'environment'>('user');
+  const [cameras, setCameras] = useState(0);
 
   const peers = useRef(new Map<string, Peer>());
   const stream = useRef<MediaStream | null>(null);
@@ -178,6 +180,7 @@ export function useCall(projectId: string | undefined, selfId: string | undefine
     setRemotes({});
     setLocal(null);
     setSent(null);
+    setFacing('user');
     setStatus('idle');
   }, []);
 
@@ -308,6 +311,48 @@ export function useCall(projectId: string | undefined, selfId: string | undefine
     setCamOn(on);
   }, [camOn]);
 
+  /** Phones and tablets have a front and a back camera: swap to the other one without leaving the call. */
+  const switchCamera = useCallback(async () => {
+    const current = stream.current;
+    const oldTrack = current?.getVideoTracks()[0];
+    if (!current || !oldTrack) return;
+    const next = facing === 'user' ? 'environment' : 'user';
+    const spec = specOf(qualityRef.current);
+    const size = { width: { ideal: spec.width }, height: { ideal: spec.height }, frameRate: { ideal: fpsRef.current } };
+    let fresh: MediaStream;
+    try {
+      try {
+        fresh = await navigator.mediaDevices.getUserMedia({ video: { ...size, facingMode: { exact: next } } });
+      } catch (e) {
+        if (errName(e) !== 'OverconstrainedError' && errName(e) !== 'NotFoundError') throw e;
+        fresh = await navigator.mediaDevices.getUserMedia({ video: { ...size, facingMode: { ideal: next } } });
+      }
+    } catch {
+      setNotice('The other camera could not be started, so the current one stays on.');
+      return;
+    }
+    const track = fresh.getVideoTracks()[0];
+    if (!track || !live.current) { fresh.getTracks().forEach(t => t.stop()); return; }
+    track.enabled = camOn;
+    // The people on the call keep the same connection; only the picture inside it changes.
+    await Promise.all([...peers.current.values()].map(({ pc }) =>
+      pc.getSenders().find(s => s.track?.kind === 'video')?.replaceTrack(track).catch(() => { /* that person just left */ })));
+    current.removeTrack(oldTrack);
+    oldTrack.stop();
+    current.addTrack(track);
+    setLocal(new MediaStream(current.getTracks())); // a new object, so the preview picks the new picture up
+    setFacing(next);
+    readSent();
+  }, [facing, camOn, readSent]);
+
+  // The switch button only shows when the device has more than one camera (after permission, the browser lists them).
+  useEffect(() => {
+    if (status !== 'live') return;
+    navigator.mediaDevices.enumerateDevices()
+      .then(d => setCameras(d.filter(x => x.kind === 'videoinput').length))
+      .catch(() => setCameras(0));
+  }, [status, local]);
+
   /** Asks the camera for the chosen size and rate, and lets the senders use the matching bandwidth. */
   const applyCamera = useCallback(() => {
     const spec = specOf(qualityRef.current);
@@ -372,6 +417,7 @@ export function useCall(projectId: string | undefined, selfId: string | undefine
 
   return {
     status, local, remotes: Object.values(remotes), micOn, camOn, quality, fps, relay, sent, error, notice,
+    facing, canSwitchCamera: cameras > 1, switchCamera,
     start, cancel, leave, toggleMic, toggleCam, setQuality, setFps, onSignal, onPeerLeft: closePeer, onReconnect,
     hasCamera: (local?.getVideoTracks().length ?? 0) > 0,
   };

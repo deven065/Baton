@@ -1,4 +1,4 @@
-import { Maximize2, MessageCircle, Mic, MicOff, PhoneOff, Send, Video, VideoOff, X } from 'lucide-react';
+import { Maximize2, MessageCircle, Mic, MicOff, Minimize2, PhoneOff, Send, SwitchCamera, Video, VideoOff, X } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/form';
@@ -147,6 +147,19 @@ function useCameraBlocked(): boolean | null {
 
 function CallView({ call, inCall, selfName }: { call: ReturnType<typeof useCall>; inCall: Participant[]; selfName: string }) {
   const blocked = useCameraBlocked();
+  const stage = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    const on = () => setFull(document.fullscreenElement === stage.current);
+    document.addEventListener('fullscreenchange', on);
+    return () => document.removeEventListener('fullscreenchange', on);
+  }, []);
+  const canFullscreen = typeof document !== 'undefined' && document.fullscreenEnabled === true;
+  // The whole call goes full screen, not one person's picture: everyone stays visible, with yourself in a corner.
+  const toggleFull = () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void stage.current?.requestFullscreen?.();
+  };
   if (call.status === 'asking') {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-6 text-center" role="status">
@@ -190,21 +203,27 @@ function CallView({ call, inCall, selfName }: { call: ReturnType<typeof useCall>
   }
   const tiles = call.remotes.length + 1;
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-ink-900">
-      <div className={cn('grid min-h-0 flex-1 auto-rows-fr gap-2 overflow-y-auto p-2', tiles > 1 ? 'sm:grid-cols-2' : 'grid-cols-1')}>
+    <div ref={stage} className="flex min-h-0 flex-1 flex-col bg-ink-900">
+      <div className={cn('relative grid min-h-0 flex-1 auto-rows-fr gap-2 overflow-y-auto p-2',
+        full ? (call.remotes.length > 1 ? 'grid-cols-2' : 'grid-cols-1') : tiles > 1 ? 'sm:grid-cols-2' : 'grid-cols-1')}>
         {call.remotes.map(r => <Tile key={r.userId} remote={r} relay={call.relay} />)}
         {call.remotes.length === 0 && (
           <div className="grid place-items-center rounded-xl border border-dashed border-ink-500 p-6 text-center text-small text-ink-300">
             {call.status === 'starting' ? 'Joining…' : 'Waiting for others to join. They can open the team room and tap Join the call.'}
           </div>
         )}
-        <Tile local stream={call.local} name={`${selfName} (you)`} off={!call.camOn || !call.hasCamera} muted />
+        <Tile local stream={call.local} name={`${selfName} (you)`} off={!call.camOn || !call.hasCamera} muted mirror={call.facing === 'user'}
+          className={full ? 'absolute bottom-3 right-3 z-10 h-[22%] min-h-[96px] w-[28%] min-w-[140px] max-w-[260px] border border-white/30 shadow-lg' : undefined} />
       </div>
       {call.notice && <p className="bg-inferred/20 px-4 py-1.5 text-caption text-white">{call.notice}</p>}
       {call.error && <p role="alert" className="bg-conflict/30 px-4 py-1.5 text-caption text-white">{call.error}</p>}
       <div className="flex flex-wrap items-center justify-center gap-2 border-t border-white/10 bg-ink-900 px-3 py-2.5">
         <Control on={call.micOn} label={call.micOn ? 'Mute microphone' : 'Unmute microphone'} onClick={call.toggleMic} icon={call.micOn ? Mic : MicOff} />
         {call.hasCamera && <Control on={call.camOn} label={call.camOn ? 'Turn camera off' : 'Turn camera on'} onClick={call.toggleCam} icon={call.camOn ? Video : VideoOff} />}
+        {call.hasCamera && call.canSwitchCamera && (
+          <Control on label={call.facing === 'user' ? 'Switch to the back camera' : 'Switch to the front camera'} onClick={() => void call.switchCamera()} icon={SwitchCamera} />
+        )}
+        {canFullscreen && <Control on label={full ? 'Exit full screen' : 'Full screen'} onClick={toggleFull} icon={full ? Minimize2 : Maximize2} />}
         <QualityPicker value={call.quality} onChange={call.setQuality} dark />
         <FpsPicker value={call.fps} onChange={call.setFps} dark />
         <Button kind="danger" aria-label="Leave the call" onClick={call.leave}><PhoneOff className="size-4" aria-hidden />Leave</Button>
@@ -245,7 +264,7 @@ function Control({ on, label, onClick, icon: Icon }: { on: boolean; label: strin
   );
 }
 
-function Tile({ remote, local, stream, name, muted, off, relay }: { remote?: Remote; local?: boolean; stream?: MediaStream | null; name?: string; muted?: boolean; off?: boolean; relay?: boolean }) {
+function Tile({ remote, local, stream, name, muted, off, relay, mirror, className }: { remote?: Remote; local?: boolean; stream?: MediaStream | null; name?: string; muted?: boolean; off?: boolean; relay?: boolean; mirror?: boolean; className?: string }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [size, setSize] = useState('');
   const [stuck, setStuck] = useState(false);
@@ -269,18 +288,14 @@ function Tile({ remote, local, stream, name, muted, off, relay }: { remote?: Rem
       : 'Couldn’t connect. One of your networks blocks direct video, and this workspace has no relay server yet. An admin can add one by setting TURN_URL, TURN_USERNAME and TURN_CREDENTIAL on the API (see the documentation).')
     : 'Connecting…') : null;
   return (
-    <div className="relative min-h-[140px] overflow-hidden rounded-xl bg-black">
-      <video ref={ref} autoPlay playsInline muted={muted} className={cn('size-full object-contain', local && 'scale-x-[-1]', off && 'invisible')} />
+    <div className={cn('relative min-h-[140px] overflow-hidden rounded-xl bg-black', className)}>
+      <video ref={ref} autoPlay playsInline muted={muted} className={cn('size-full object-contain', local && mirror !== false && 'scale-x-[-1]', off && 'invisible')} />
       {(off || !media) && !status && <div className="absolute inset-0 grid place-items-center text-small text-ink-300">{off ? 'Camera off' : ''}</div>}
       {status && <div className="absolute inset-0 grid place-items-center p-4 text-center text-small text-white/90">{status}</div>}
       {stuck && !status && (
         <button type="button" onClick={play} className="absolute inset-0 grid place-items-center bg-black/60 text-small font-medium text-white cursor-pointer">Click to play</button>
       )}
       <span className="absolute bottom-2 left-2 rounded-md bg-black/60 px-2 py-0.5 text-caption text-white">{label}{size ? ` · ${size}` : ''}</span>
-      {!local && media && (
-        <button type="button" aria-label={`Full screen: ${label}`} onClick={() => void ref.current?.requestFullscreen?.()}
-          className="absolute top-2 right-2 rounded-md bg-black/60 p-1.5 text-white hover:bg-black/80 cursor-pointer"><Maximize2 className="size-3.5" /></button>
-      )}
     </div>
   );
 }
