@@ -207,7 +207,13 @@ not on the project gets "not found").
 - **Chat**: one running conversation per project, saved in the company's own database. New messages appear at once
   for everyone, with an unread count on the button. Messages are 1 to 2000 characters, rate limited, and refused if
   they look like a key or password, the same rule as exit-interview answers.
-- **Video call**: up to four people. Smoothness can be set to 30, **60 (default)** or **90 frames a second**; the
+- **Two kinds of call**: the video call tab offers a **group call** (the one anyone on the project can join, up to
+  four) and a **Call one person** list of everyone on the project, with a green dot for who has the team room open.
+  A direct call is private to its two people: the other person is rung (a card with Answer and Decline appears on
+  whatever page they are on, even with the room closed), the caller sees "Calling…", hanging up before an answer stops
+  the ring, and declining tells the caller. Nobody else can join or listen in, a call can only be placed to someone on
+  the same project, and starting one call leaves the other.
+- **Video call**: up to four people in the group call. Smoothness can be set to 30, **60 (default)** or **90 frames a second**; the
   browser uses the closest rate the camera really offers (most webcams 30, many 60, a few 90) and the call says when
   the camera tops out lower. To stop glitches the call watches the outgoing video and, if the computer is the
   bottleneck twice in a row, lowers the frame rate and then the size by itself and says so. Each person you send to

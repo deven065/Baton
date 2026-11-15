@@ -108,17 +108,63 @@ class RoomApiTest {
     }
 
     @Test
+    void aDirectCallIsPrivateToItsTwoPeopleAndSeparateFromTheGeneralCall() throws Exception {
+        DemoFixture demo = new DemoFixture(mvc, jdbc, demoPassword).createProject("Room direct");
+        String neha = demo.login("neha@annapurna.test");
+        String priya = demo.login("priya@annapurna.test");
+        String arjun = demo.login("arjun@annapurna.test");
+        String admin = demo.login("admin@annapurna.test");
+        String base = "/api/projects/" + demo.projectId + "/room/";
+        UUID nehaId = jdbc.sql("SELECT id FROM app_user WHERE email = 'neha@annapurna.test'").query(UUID.class).single();
+        UUID priyaId = jdbc.sql("SELECT id FROM app_user WHERE email = 'priya@annapurna.test'").query(UUID.class).single();
+        UUID adminId = jdbc.sql("SELECT id FROM app_user WHERE email = 'admin@annapurna.test'").query(UUID.class).single();
+
+        // Neha calls Priya; nobody has the room open in a test, so nobody is rung.
+        String room = JsonPath.read(send(post(base + "call/join"), neha, Map.of("with", priyaId.toString())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.others.length()").value(0)).andExpect(jsonPath("$.maxInCall").value(2))
+                .andExpect(jsonPath("$.ringing").value(false)).andReturn().getResponse().getContentAsString(), "$.room");
+        assertThat(room).startsWith("dm:");
+        // Priya picks up by calling Neha back: the same room, with Neha already in it.
+        send(post(base + "call/join"), priya, Map.of("with", nehaId.toString())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.room").value(room)).andExpect(jsonPath("$.others[0].name").value("Neha Kulkarni"));
+        Map<String, Object> offer = Map.of("to", priyaId.toString(), "kind", "offer", "data", "{}");
+        send(post(base + "call/signal"), neha, offer).andExpect(status().isNoContent());
+
+        // Arjun is on the project, but a call between two others is not his: he gets a room of his own, nothing flows to or from it.
+        send(post(base + "call/join"), arjun, Map.of("with", nehaId.toString())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.others.length()").value(0));
+        send(post(base + "call/signal"), neha, Map.of("to", priyaId.toString(), "kind", "offer", "data", "{}")).andExpect(status().isNoContent());
+        send(post(base + "call/leave"), arjun, null).andExpect(status().isNoContent());
+
+        // You cannot call yourself, someone outside the project, or a stranger.
+        send(post(base + "call/join"), neha, Map.of("with", nehaId.toString())).andExpect(status().isNotFound());
+        send(post(base + "call/join"), neha, Map.of("with", adminId.toString())).andExpect(status().isNotFound());
+        send(post(base + "call/join"), neha, Map.of("with", UUID.randomUUID().toString())).andExpect(status().isNotFound());
+        send(post(base + "call/join"), admin, Map.of("with", nehaId.toString())).andExpect(status().isNotFound());
+
+        // Neha moves to the general call: she leaves the direct one, so Priya can no longer reach her.
+        send(post(base + "call/join"), neha, null).andExpect(status().isOk()).andExpect(jsonPath("$.room").value("general"));
+        send(post(base + "call/signal"), priya, Map.of("to", nehaId.toString(), "kind", "offer", "data", "{}")).andExpect(status().isNotFound());
+
+        // Declining tells nobody who is not on the project, and the online list is for members only.
+        send(post(base + "call/decline"), priya, Map.of("to", nehaId.toString())).andExpect(status().isNoContent());
+        send(post(base + "call/decline"), priya, Map.of("to", adminId.toString())).andExpect(status().isNotFound());
+        send(get(base + "online"), priya, null).andExpect(status().isOk());
+        send(get(base + "online"), admin, null).andExpect(status().isNotFound());
+    }
+
+    @Test
     void aCallHoldsFourPeopleAndNoMore() {
         RoomHub hub = new RoomHub();
         UUID project = UUID.randomUUID();
         for (int i = 0; i < RoomHub.MAX_IN_CALL; i++) {
-            assertThat(hub.join(project, UUID.randomUUID(), "Person " + i)).isTrue();
+            assertThat(hub.join(project, RoomHub.GENERAL, UUID.randomUUID(), "Person " + i)).isTrue();
         }
-        assertThat(hub.join(project, UUID.randomUUID(), "One too many")).isFalse();
+        assertThat(hub.join(project, RoomHub.GENERAL, UUID.randomUUID(), "One too many")).isFalse();
         UUID first = hub.participants(project).getFirst().userId();
-        assertThat(hub.join(project, first, "Again")).isTrue(); // already in: harmless
+        assertThat(hub.join(project, RoomHub.GENERAL, first, "Again")).isTrue(); // already in: harmless
         hub.leave(project, first);
-        assertThat(hub.join(project, UUID.randomUUID(), "Now there is room")).isTrue();
+        assertThat(hub.join(project, RoomHub.GENERAL, UUID.randomUUID(), "Now there is room")).isTrue();
         assertThat(hub.participants(project)).hasSize(RoomHub.MAX_IN_CALL);
     }
 }

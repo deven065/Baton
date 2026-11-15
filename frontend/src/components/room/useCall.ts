@@ -38,6 +38,8 @@ interface JoinView {
   others: Participant[];
   maxInCall: number;
   iceServers: { urls: string[]; username?: string | null; credential?: string | null }[];
+  room: string;
+  ringing: boolean;
 }
 type Peer = { pc: RTCPeerConnection; pending: RTCIceCandidateInit[]; initiator: boolean; restarts: number; queue: Promise<void> };
 type SendParams = RTCRtpSendParameters & { degradationPreference?: string };
@@ -85,6 +87,10 @@ export function useCall(projectId: string | undefined, selfId: string | undefine
   const [notice, setNotice] = useState<string | null>(null);
   const [facing, setFacing] = useState<'user' | 'environment'>('user');
   const [cameras, setCameras] = useState(0);
+  /** The person being called directly; null on the general call. */
+  const [peer, setPeer] = useState<Participant | null>(null);
+  /** A direct call nobody has picked up yet. */
+  const [waiting, setWaiting] = useState(false);
 
   const peers = useRef(new Map<string, Peer>());
   const stream = useRef<MediaStream | null>(null);
@@ -181,6 +187,8 @@ export function useCall(projectId: string | undefined, selfId: string | undefine
     setLocal(null);
     setSent(null);
     setFacing('user');
+    setPeer(null);
+    setWaiting(false);
     setStatus('idle');
   }, []);
 
@@ -190,7 +198,7 @@ export function useCall(projectId: string | undefined, selfId: string | undefine
     signal(p.userId, 'offer', pc.localDescription?.toJSON());
   }, [makePeer, signal]);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (withUser?: Participant) => {
     if (!projectId || live.current) return;
     setError(null);
     setNotice(null);
@@ -236,7 +244,10 @@ export function useCall(projectId: string | undefined, selfId: string | undefine
     setCamOn(media.getVideoTracks().length > 0);
     live.current = true;
     try {
-      const join = await api<JoinView>(`${room(projectId)}/call/join`, { method: 'POST' });
+      const join = await api<JoinView>(`${room(projectId)}/call/join`, withUser ? { method: 'POST', json: { with: withUser.userId } } : { method: 'POST' });
+      setPeer(withUser ?? null);
+      setWaiting(!!withUser && join.others.length === 0);
+      if (withUser && join.others.length === 0 && !join.ringing) setNotice(`${withUser.name.split(/\s+/)[0]} doesn’t have the team room open right now, so they could not be rung. Stay on the call, or try again later.`);
       ice.current = join.iceServers.map(i => ({ urls: i.urls, username: i.username ?? undefined, credential: i.credential ?? undefined }));
       setRelay(join.iceServers.some(i => i.urls.some(u => /^turns?:/i.test(u))));
       setStatus('live');
@@ -259,6 +270,33 @@ export function useCall(projectId: string | undefined, selfId: string | undefine
     if (projectId && live.current) api<void>(`${room(projectId)}/call/leave`, { method: 'POST' }).catch(() => { /* already out */ });
     cleanup();
   }, [projectId, cleanup]);
+
+  const peerRef = useRef<Participant | null>(null);
+  peerRef.current = peer;
+
+  /** In a direct call, the other person leaving ends it; on the general call people simply come and go. */
+  const onPeerLeft = useCallback((userId: string) => {
+    closePeer(userId);
+    const p = peerRef.current;
+    if (p && p.userId === userId && live.current) {
+      leave();
+      setNotice(`${p.name.split(/\s+/)[0]} ended the call.`);
+    }
+  }, [closePeer, leave]);
+
+  /** The person we rang said no. */
+  const onDeclined = useCallback((userId: string, name: string) => {
+    const p = peerRef.current;
+    if (p && p.userId === userId && live.current) {
+      leave();
+      setError(`${name.split(/\s+/)[0]} can’t take the call right now.`);
+    }
+  }, [leave]);
+
+  /** Say no to someone ringing you. */
+  const decline = useCallback((userId: string) => {
+    if (projectId) api<void>(`${room(projectId)}/call/decline`, { method: 'POST', json: { to: userId } }).catch(() => { /* they hung up already */ });
+  }, [projectId]);
 
   const onSignal = useCallback((s: SignalEvent) => {
     if (!live.current) return;
@@ -418,7 +456,8 @@ export function useCall(projectId: string | undefined, selfId: string | undefine
   return {
     status, local, remotes: Object.values(remotes), micOn, camOn, quality, fps, relay, sent, error, notice,
     facing, canSwitchCamera: cameras > 1, switchCamera,
-    start, cancel, leave, toggleMic, toggleCam, setQuality, setFps, onSignal, onPeerLeft: closePeer, onReconnect,
+    start, cancel, leave, toggleMic, toggleCam, setQuality, setFps, onSignal, onPeerLeft, onReconnect, onDeclined, decline,
+    peer, waiting: waiting && Object.keys(remotes).length === 0,
     hasCamera: (local?.getVideoTracks().length ?? 0) > 0,
   };
 }

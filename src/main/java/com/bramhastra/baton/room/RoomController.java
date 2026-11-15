@@ -55,7 +55,15 @@ public class RoomController {
     public record IceServer(List<String> urls, String username, String credential) {
     }
 
-    public record JoinView(List<RoomHub.Participant> others, int maxInCall, List<IceServer> iceServers) {
+    /** {@code with} set = a direct call with that person; empty = the call everyone on the project can join. */
+    public record JoinRequest(UUID with) {
+    }
+
+    public record DeclineRequest(UUID to) {
+    }
+
+    public record JoinView(List<RoomHub.Participant> others, int maxInCall, List<IceServer> iceServers, String room,
+                           boolean ringing) {
     }
 
     private final JdbcClient jdbc;
@@ -139,18 +147,38 @@ public class RoomController {
         return hub.subscribe(projectId, currentUser.get().id());
     }
 
-    /** Joins the call. Returns who is already in it (to ring) and the network servers browsers should use. */
+    /**
+     * Joins a call. Without {@code with} it is the project's general call; with it, a direct call with that one person,
+     * who is rung if they are online. Returns who is already in the room and the network servers browsers should use.
+     */
     @PostMapping("/call/join")
-    public JoinView join(@PathVariable UUID projectId) {
+    public JoinView join(@PathVariable UUID projectId, @RequestBody(required = false) JoinRequest req) {
         CurrentUser me = currentUser.get();
         access.requireMember(me, projectId);
-        if (!hub.join(projectId, me.id(), me.displayName())) {
-            throw new ApiException(ErrorCode.NOT_ALLOWED,
-                    "The call is full. Up to " + RoomHub.MAX_IN_CALL + " people can be on it at once.");
+        UUID with = req == null ? null : req.with();
+        String room = RoomHub.GENERAL;
+        if (with != null) {
+            if (with.equals(me.id()) || !isMember(projectId, with)) {
+                throw ApiException.notFound(); // only people on this project can be called
+            }
+            room = RoomHub.directRoom(me.id(), with);
         }
-        List<RoomHub.Participant> others = hub.participants(projectId).stream()
+        boolean wasEmpty = hub.participants(projectId, room).isEmpty();
+        if (!hub.join(projectId, room, me.id(), me.displayName())) {
+            throw new ApiException(ErrorCode.NOT_ALLOWED, with != null ? "That call already has two people."
+                    : "The call is full. Up to " + RoomHub.MAX_IN_CALL + " people can be on it at once.");
+        }
+        boolean ringing = false;
+        if (with != null && wasEmpty) {
+            limiter.acquire("ring:" + me.id(), 20, Duration.ofMinutes(1));
+            ringing = hub.online(projectId).contains(with);
+            if (ringing) {
+                hub.sendTo(projectId, with, "call-ring", Map.of("from", me.id(), "fromName", me.displayName()));
+            }
+        }
+        List<RoomHub.Participant> others = hub.participants(projectId, room).stream()
                 .filter(p -> !p.userId().equals(me.id())).toList();
-        return new JoinView(others, RoomHub.MAX_IN_CALL, iceServers());
+        return new JoinView(others, with != null ? 2 : RoomHub.MAX_IN_CALL, iceServers(), room, ringing);
     }
 
     @PostMapping("/call/leave")
@@ -158,7 +186,39 @@ public class RoomController {
     public void leave(@PathVariable UUID projectId) {
         CurrentUser me = currentUser.get();
         access.requireMember(me, projectId);
-        hub.leave(projectId, me.id());
+        String room = hub.leave(projectId, me.id());
+        // Hung up before the other person answered: stop their phone ringing.
+        if (room != null && RoomHub.isDirect(room) && hub.participants(projectId, room).isEmpty()) {
+            UUID other = RoomHub.otherInDirect(room, me.id());
+            if (other != null) {
+                hub.sendTo(projectId, other, "call-cancelled", Map.of("from", me.id()));
+            }
+        }
+    }
+
+    /** Says no to a ring. The caller is told, and their direct call ends. */
+    @PostMapping("/call/decline")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void decline(@PathVariable UUID projectId, @RequestBody DeclineRequest req) {
+        CurrentUser me = currentUser.get();
+        access.requireMember(me, projectId);
+        if (req.to() == null || !isMember(projectId, req.to())) {
+            throw ApiException.notFound();
+        }
+        limiter.acquire("ring:" + me.id(), 20, Duration.ofMinutes(1));
+        hub.sendTo(projectId, req.to(), "call-declined", Map.of("from", me.id(), "fromName", me.displayName()));
+    }
+
+    /** Who on the project has the team room open right now (for the "call someone" list). */
+    @GetMapping("/online")
+    public List<UUID> online(@PathVariable UUID projectId) {
+        access.requireMember(currentUser.get(), projectId);
+        return List.copyOf(hub.online(projectId));
+    }
+
+    private boolean isMember(UUID projectId, UUID userId) {
+        return jdbc.sql("SELECT count(*) FROM project_member WHERE project_id = :p AND user_id = :u")
+                .param("p", projectId).param("u", userId).query(Long.class).single() > 0;
     }
 
     /** Passes one setup message (offer, answer or network candidate) to another person on the same call. */
@@ -173,7 +233,7 @@ public class RoomController {
                     Map.of("signal", "Send an offer, answer or ice message to someone on the call"));
         }
         // Both ends must be on the call; nothing is relayed to anyone else.
-        if (!hub.inCall(projectId, me.id()) || !hub.inCall(projectId, req.to())) {
+        if (!hub.together(projectId, me.id(), req.to())) {
             throw ApiException.notFound();
         }
         limiter.acquire("signal:" + me.id(), 1200, Duration.ofMinutes(1));

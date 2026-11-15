@@ -26,6 +26,8 @@ public class RoomHub {
 
     /** A call is a mesh (everyone sends to everyone), so it is capped where 4K uplinks stay realistic. */
     public static final int MAX_IN_CALL = 4;
+    /** The call everyone on the project can join. A direct call is a separate room with just two people. */
+    public static final String GENERAL = "general";
     private static final long TIMEOUT_MS = 60 * 60 * 1000L;
 
     public record Participant(UUID userId, String name) {
@@ -35,7 +37,31 @@ public class RoomHub {
     }
 
     private final Map<UUID, List<Listener>> listeners = new ConcurrentHashMap<>();
-    private final Map<UUID, Map<UUID, String>> calls = new ConcurrentHashMap<>();
+    /** project -> room -> who is in it. A person is in at most one room of a project at a time. */
+    private final Map<UUID, Map<String, Map<UUID, String>>> calls = new ConcurrentHashMap<>();
+
+    /** The room for a call between two specific people: the same key whichever of them asks first. */
+    public static String directRoom(UUID a, UUID b) {
+        return a.compareTo(b) < 0 ? "dm:" + a + ":" + b : "dm:" + b + ":" + a;
+    }
+
+    public static boolean isDirect(String room) {
+        return room.startsWith("dm:");
+    }
+
+    /** True when the room is a direct call that this person is one of the two people of. */
+    public static boolean directRoomHas(String room, UUID user) {
+        return isDirect(room) && java.util.Arrays.asList(room.substring(3).split(":")).contains(user.toString());
+    }
+
+    public static UUID otherInDirect(String room, UUID me) {
+        for (String id : room.substring(3).split(":")) {
+            if (!id.equals(me.toString())) {
+                return UUID.fromString(id);
+            }
+        }
+        return null;
+    }
 
     /** Opens a stream for one browser tab. The first event says who is already in a call. */
     public SseEmitter subscribe(UUID projectId, UUID userId) {
@@ -73,39 +99,95 @@ public class RoomHub {
         }
     }
 
-    /** Adds someone to the project's call. False when it is full; joining twice is harmless. */
-    public synchronized boolean join(UUID projectId, UUID userId, String name) {
-        Map<UUID, String> call = calls.computeIfAbsent(projectId, k -> new LinkedHashMap<>());
-        if (!call.containsKey(userId) && call.size() >= MAX_IN_CALL) {
+    /** Adds someone to a call room. False when it is full; joining twice is harmless. Leaves any other room first. */
+    public synchronized boolean join(UUID projectId, String room, UUID userId, String name) {
+        int cap = isDirect(room) ? 2 : MAX_IN_CALL;
+        Map<UUID, String> here = calls.computeIfAbsent(projectId, k -> new ConcurrentHashMap<>()).computeIfAbsent(room, k -> new LinkedHashMap<>());
+        if (!here.containsKey(userId) && here.size() >= cap) {
             return false;
         }
-        boolean added = call.put(userId, name) == null;
+        String current = roomOf(projectId, userId);
+        if (current != null && !current.equals(room)) {
+            leave(projectId, userId);
+            here = calls.computeIfAbsent(projectId, k -> new ConcurrentHashMap<>()).computeIfAbsent(room, k -> new LinkedHashMap<>());
+        }
+        boolean added = here.put(userId, name) == null;
         if (added) {
-            broadcast(projectId, "call-joined", new Participant(userId, name));
+            announce(projectId, room, "call-joined", Map.of("userId", userId, "name", name, "room", room));
         }
         return true;
     }
 
-    public synchronized void leave(UUID projectId, UUID userId) {
-        Map<UUID, String> call = calls.get(projectId);
-        if (call != null && call.remove(userId) != null) {
-            if (call.isEmpty()) {
-                calls.remove(projectId);
+    /** Takes the person out of whatever room they are in. Returns that room, or null when they were in none. */
+    public synchronized String leave(UUID projectId, UUID userId) {
+        Map<String, Map<UUID, String>> rooms = calls.get(projectId);
+        if (rooms == null) {
+            return null;
+        }
+        for (var e : new ArrayList<>(rooms.entrySet())) {
+            if (e.getValue().remove(userId) != null) {
+                if (e.getValue().isEmpty()) {
+                    rooms.remove(e.getKey());
+                }
+                if (rooms.isEmpty()) {
+                    calls.remove(projectId);
+                }
+                announce(projectId, e.getKey(), "call-left", Map.of("userId", userId, "room", e.getKey()));
+                return e.getKey();
             }
-            broadcast(projectId, "call-left", Map.of("userId", userId));
+        }
+        return null;
+    }
+
+    /** The general call is announced to the whole project; a direct call only to its two people. */
+    private void announce(UUID projectId, String room, String event, Object data) {
+        if (isDirect(room)) {
+            for (String id : room.substring(3).split(":")) {
+                sendTo(projectId, UUID.fromString(id), event, data);
+            }
+        } else {
+            broadcast(projectId, event, data);
         }
     }
 
-    public synchronized boolean inCall(UUID projectId, UUID userId) {
-        Map<UUID, String> call = calls.get(projectId);
-        return call != null && call.containsKey(userId);
+    public synchronized String roomOf(UUID projectId, UUID userId) {
+        Map<String, Map<UUID, String>> rooms = calls.get(projectId);
+        if (rooms != null) {
+            for (var e : rooms.entrySet()) {
+                if (e.getValue().containsKey(userId)) {
+                    return e.getKey();
+                }
+            }
+        }
+        return null;
     }
 
-    public synchronized List<Participant> participants(UUID projectId) {
-        Map<UUID, String> call = calls.get(projectId);
+    /** Both people are in the same room, so setup messages may pass between them. */
+    public synchronized boolean together(UUID projectId, UUID a, UUID b) {
+        String room = roomOf(projectId, a);
+        return room != null && room.equals(roomOf(projectId, b));
+    }
+
+    public synchronized List<Participant> participants(UUID projectId, String room) {
+        Map<String, Map<UUID, String>> rooms = calls.get(projectId);
         List<Participant> out = new ArrayList<>();
-        if (call != null) {
-            call.forEach((id, name) -> out.add(new Participant(id, name)));
+        if (rooms != null && rooms.get(room) != null) {
+            rooms.get(room).forEach((id, name) -> out.add(new Participant(id, name)));
+        }
+        return out;
+    }
+
+    /** Who is in the general call: what the room button and the "is on a call" line show. */
+    public List<Participant> participants(UUID projectId) {
+        return participants(projectId, GENERAL);
+    }
+
+    /** People with a browser open on this project's team room right now. */
+    public java.util.Set<UUID> online(UUID projectId) {
+        List<Listener> list = listeners.get(projectId);
+        java.util.Set<UUID> out = new java.util.LinkedHashSet<>();
+        if (list != null) {
+            list.forEach(l -> out.add(l.userId()));
         }
         return out;
     }

@@ -1,7 +1,8 @@
-import { Maximize2, MessageCircle, Mic, MicOff, Minimize2, PhoneOff, Send, SwitchCamera, Video, VideoOff, X } from 'lucide-react';
+import { Maximize2, MessageCircle, Mic, MicOff, Minimize2, Phone, PhoneOff, Send, SwitchCamera, Users, Video, VideoOff, X } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/form';
+import { useProject } from '@/data/live';
 import { useAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/http';
 import { cn } from '@/lib/utils';
@@ -29,7 +30,31 @@ function Dock({ projectId, selfId, selfName }: { projectId: string; selfId: stri
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<'chat' | 'call'>('chat');
   const call = useCall(projectId, selfId);
-  const room = useRoom(projectId, { onSignal: call.onSignal, onPeerLeft: call.onPeerLeft, onReconnect: call.onReconnect });
+  const room = useRoom(projectId, { onSignal: call.onSignal, onPeerLeft: call.onPeerLeft, onReconnect: call.onReconnect, onDeclined: call.onDeclined });
+  const project = useProject(projectId);
+  const members = (project.data?.members ?? []).filter(m => m.userId !== selfId)
+    .map(m => ({ userId: m.userId, name: m.displayName, lead: m.role === 'PROJECT_LEAD' }));
+  const { ring, dismissRing } = room;
+  // A ring that nobody answers stops after a while.
+  useEffect(() => {
+    if (!ring) return;
+    const t = window.setTimeout(dismissRing, 45_000);
+    return () => window.clearTimeout(t);
+  }, [ring, dismissRing]);
+  const answer = () => {
+    if (!ring) return;
+    const from = { userId: ring.from, name: ring.fromName };
+    dismissRing();
+    if (call.status !== 'idle') call.leave();
+    setOpen(true);
+    setTab('call');
+    void call.start(from);
+  };
+  const refuse = () => {
+    if (!ring) return;
+    call.decline(ring.from);
+    dismissRing();
+  };
   const [readAt, setReadAt] = useState(() => loadRead(projectId));
   const latest = room.messages.at(-1)?.createdAt;
 
@@ -65,9 +90,23 @@ function Dock({ projectId, selfId, selfName }: { projectId: string; selfId: stri
         {!room.connected && <p role="status" className="bg-inferred/10 px-4 py-1.5 text-caption text-ink-700">Reconnecting…</p>}
         <div className="flex min-h-0 flex-1 flex-col">
           <div hidden={tab !== 'chat'} className="flex min-h-0 flex-1 flex-col"><Chat messages={room.messages} selfId={selfId} onSend={room.send} /></div>
-          <div hidden={tab !== 'call'} className="flex min-h-0 flex-1 flex-col"><CallView call={call} inCall={others} selfName={selfName} /></div>
+          <div hidden={tab !== 'call'} className="flex min-h-0 flex-1 flex-col"><CallView call={call} inCall={others} selfName={selfName} members={members} online={room.online} /></div>
         </div>
       </section>
+
+      {ring && (
+        <div role="alertdialog" aria-label={`${ring.fromName} is calling you`}
+          className="pointer-events-auto w-full rounded-2xl border border-line bg-card p-4 shadow-pop sm:w-[340px]">
+          <p className="flex items-center gap-3 text-body font-semibold">
+            <span className="grid size-10 shrink-0 animate-pulse place-items-center rounded-full bg-verified/15 text-verified"><Phone className="size-5" aria-hidden /></span>
+            <span className="min-w-0">{ring.fromName}<span className="block text-small font-normal text-ink-500">is calling you</span></span>
+          </p>
+          <div className="mt-3 flex gap-2">
+            <Button kind="primary" onClick={answer}><Video className="size-4" aria-hidden />Answer</Button>
+            <Button onClick={refuse}>Decline</Button>
+          </div>
+        </div>
+      )}
 
       <button type="button" onClick={() => { setOpen(o => !o); if (!open && others.length > 0 && !live) setTab('call'); }}
         aria-label={open ? 'Close team room' : unread ? `Open team room, ${unread} unread` : others.length && !live ? 'Open team room, a call is on' : 'Open team room'} aria-expanded={open}
@@ -145,7 +184,9 @@ function useCameraBlocked(): boolean | null {
   return blocked;
 }
 
-function CallView({ call, inCall, selfName }: { call: ReturnType<typeof useCall>; inCall: Participant[]; selfName: string }) {
+type Member = { userId: string; name: string; lead: boolean };
+
+function CallView({ call, inCall, selfName, members, online }: { call: ReturnType<typeof useCall>; inCall: Participant[]; selfName: string; members: Member[]; online: string[] }) {
   const blocked = useCameraBlocked();
   const stage = useRef<HTMLDivElement>(null);
   const [full, setFull] = useState(false);
@@ -174,14 +215,59 @@ function CallView({ call, inCall, selfName }: { call: ReturnType<typeof useCall>
   }
   if (call.status === 'idle') {
     const names = inCall.map(p => first(p.name));
+    const onlineSet = new Set(online);
+    const sorted = [...members].sort((x, y) => Number(onlineSet.has(y.userId)) - Number(onlineSet.has(x.userId)) || x.name.localeCompare(y.name));
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-6 text-center">
-        <span className="grid size-14 place-items-center rounded-full bg-brand-50 text-brand-700"><Video className="size-7" aria-hidden /></span>
-        <div>
-          <h2 className="text-h3 font-semibold">{inCall.length ? `${names.join(', ')} ${inCall.length === 1 ? 'is' : 'are'} on a call` : 'Start a video call'}</h2>
-          <p className="mx-auto mt-1 max-w-[320px] text-small text-ink-500">Talk it through with the people on this project. Up to four can be on a call, and video goes straight between your browsers.</p>
-        </div>
-        <div className="flex flex-wrap justify-center gap-3 text-left">
+      <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-5">
+        {(call.error || blocked) && (
+          <p role="alert" className="rounded-lg bg-conflict/10 px-3 py-2 text-small text-conflict">
+            {call.error ?? 'Camera and microphone are blocked for this site. Click the lock or camera icon beside the address, set them to Allow, then try again.'}
+          </p>
+        )}
+        {call.notice && !call.error && <p role="status" className="rounded-lg bg-subtle px-3 py-2 text-small text-ink-700">{call.notice}</p>}
+
+        <section aria-label="Group call" className="rounded-xl border border-line p-4">
+          <div className="flex items-start gap-3">
+            <span className="grid size-11 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-700"><Users className="size-5" aria-hidden /></span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-h3 font-semibold">Group call</h2>
+              <p className="text-small text-ink-500">
+                {inCall.length ? `${names.join(', ')} ${inCall.length === 1 ? 'is' : 'are'} on it now.` : 'A call anyone on this project can join. Up to four at once.'}
+              </p>
+            </div>
+          </div>
+          <Button className="mt-3" kind="primary" onClick={() => void call.start()}>
+            <Video className="size-4" aria-hidden />{inCall.length ? 'Join the group call' : 'Start a group call'}
+          </Button>
+        </section>
+
+        <section aria-label="Call one person">
+          <h2 className="text-small font-semibold text-ink-900">Call one person</h2>
+          <p className="mb-2 text-caption text-ink-500">A private call with just them. They are rung if they have Baton open.</p>
+          <ul className="divide-y divide-line rounded-xl border border-line">
+            {sorted.map(m => {
+              const here = onlineSet.has(m.userId);
+              return (
+                <li key={m.userId} className="flex items-center gap-3 px-3 py-2.5">
+                  <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-brand-50 text-small font-semibold text-brand-700">
+                    {m.name.slice(0, 1).toUpperCase()}
+                    <span className={cn('absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-white', here ? 'bg-verified' : 'bg-ink-300')} aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-small font-medium text-ink-900">{m.name}</span>
+                    <span className="block text-caption text-ink-500">{m.lead ? 'Project lead · ' : ''}{here ? 'Online now' : 'Not online'}</span>
+                  </span>
+                  <Button aria-label={`Call ${m.name}`} onClick={() => void call.start({ userId: m.userId, name: m.name })}>
+                    <Phone className="size-4" aria-hidden />Call
+                  </Button>
+                </li>
+              );
+            })}
+            {sorted.length === 0 && <li className="px-3 py-3 text-small text-ink-500">No one else is on this project yet.</li>}
+          </ul>
+        </section>
+
+        <div className="flex flex-wrap gap-3 text-left">
           <label className="flex flex-col gap-1.5">
             <span className="text-caption font-medium text-ink-700">Video quality</span>
             <QualityPicker value={call.quality} onChange={call.setQuality} />
@@ -191,25 +277,22 @@ function CallView({ call, inCall, selfName }: { call: ReturnType<typeof useCall>
             <FpsPicker value={call.fps} onChange={call.setFps} />
           </label>
         </div>
-        {(call.error || blocked) && (
-          <p role="alert" className="max-w-[340px] text-small text-conflict">
-            {call.error ?? 'Camera and microphone are blocked for this site. Click the lock or camera icon beside the address, set them to Allow, then try again.'}
-          </p>
-        )}
-        <Button kind="primary" size="lg" onClick={() => void call.start()}><Video className="size-5" aria-hidden />{inCall.length ? 'Join the call' : 'Start the call'}</Button>
-        <p className="max-w-[320px] text-caption text-ink-400">Your browser will ask to use your camera and microphone. Smooth 60 fps is the default, as far as your camera can do it; if your computer struggles, the call lowers it by itself. Raise quality to 2K or 4K only with a matching camera and a fast connection. Testing with two devices in one room? Use headphones on both, or mute one, so the sound doesn’t echo.</p>
+        <p className="text-caption text-ink-400">Your browser will ask to use your camera and microphone. Video goes straight between browsers. Smooth 60 fps is the default, as far as your camera can do it; the call lowers it by itself if your computer struggles. Testing with two devices in one room? Use headphones on both, or mute one, so the sound doesn’t echo.</p>
       </div>
     );
   }
   const tiles = call.remotes.length + 1;
   return (
     <div ref={stage} className="flex min-h-0 flex-1 flex-col bg-ink-900">
+      <p className="flex items-center gap-2 border-b border-white/10 px-3 py-1.5 text-caption text-ink-300">
+        {call.peer ? <><Phone className="size-3.5" aria-hidden />Call with {first(call.peer.name)}</> : <><Users className="size-3.5" aria-hidden />Group call</>}
+      </p>
       <div className={cn('relative grid min-h-0 flex-1 auto-rows-fr gap-2 overflow-y-auto p-2',
         full ? (call.remotes.length > 1 ? 'grid-cols-2' : 'grid-cols-1') : tiles > 1 ? 'sm:grid-cols-2' : 'grid-cols-1')}>
         {call.remotes.map(r => <Tile key={r.userId} remote={r} relay={call.relay} />)}
         {call.remotes.length === 0 && (
           <div className="grid place-items-center rounded-xl border border-dashed border-ink-500 p-6 text-center text-small text-ink-300">
-            {call.status === 'starting' ? 'Joining…' : 'Waiting for others to join. They can open the team room and tap Join the call.'}
+            {call.status === 'starting' ? 'Joining…' : call.peer ? (call.waiting ? `Calling ${first(call.peer.name)}…` : 'Connecting…') : 'Waiting for others to join. They can open the team room and tap Join the group call.'}
           </div>
         )}
         <Tile local stream={call.local} name={`${selfName} (you)`} off={!call.camOn || !call.hasCamera} muted mirror={call.facing === 'user'}

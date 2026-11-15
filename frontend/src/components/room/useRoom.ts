@@ -10,7 +10,12 @@ interface Handlers {
   onPeerLeft: (userId: string) => void;
   /** Called when the live connection comes back after a break, so the call can drop peers that went away. */
   onReconnect?: (inCall: Participant[]) => void;
+  /** Someone you were calling said no. */
+  onDeclined?: (userId: string, name: string) => void;
 }
+
+/** Someone is calling you directly and has not been answered yet. */
+export interface Ring { from: string; fromName: string }
 
 const base = (projectId: string) => `/api/projects/${projectId}/room`;
 const wait = (ms: number, signal: AbortSignal) => new Promise<void>(res => {
@@ -26,6 +31,8 @@ export function useRoom(projectId: string | undefined, handlers: Handlers) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inCall, setInCall] = useState<Participant[]>([]);
   const [connected, setConnected] = useState(false);
+  const [ring, setRing] = useState<Ring | null>(null);
+  const [online, setOnline] = useState<string[]>([]);
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
@@ -55,12 +62,22 @@ export function useRoom(projectId: string | undefined, handlers: Handlers) {
             } else if (event === 'chat') {
               add(data as ChatMessage);
             } else if (event === 'call-joined') {
-              const p = data as Participant;
-              setInCall(list => (list.some(x => x.userId === p.userId) ? list : [...list, p]));
+              // Only the general call is listed as "on a call"; a direct call is private to its two people.
+              const p = data as Participant & { room?: string };
+              if (!p.room || p.room === 'general') setInCall(list => (list.some(x => x.userId === p.userId) ? list : [...list, p]));
+              else setRing(r => (r && r.from === p.userId ? null : r)); // they picked up (or we did): stop ringing
             } else if (event === 'call-left') {
-              const { userId } = data as { userId: string };
-              setInCall(list => list.filter(x => x.userId !== userId));
+              const { userId, room } = data as { userId: string; room?: string };
+              if (!room || room === 'general') setInCall(list => list.filter(x => x.userId !== userId));
               handlersRef.current.onPeerLeft(userId);
+            } else if (event === 'call-ring') {
+              setRing(data as Ring);
+            } else if (event === 'call-cancelled') {
+              const { from } = data as { from: string };
+              setRing(r => (r && r.from === from ? null : r));
+            } else if (event === 'call-declined') {
+              const d = data as { from: string; fromName: string };
+              handlersRef.current.onDeclined?.(d.from, d.fromName);
             } else if (event === 'signal') {
               handlersRef.current.onSignal(data as SignalEvent);
             }
@@ -74,10 +91,22 @@ export function useRoom(projectId: string | undefined, handlers: Handlers) {
     return () => ctl.abort();
   }, [projectId, add]);
 
+  // Who has the room open right now, for the "call someone" list.
+  useEffect(() => {
+    if (!projectId) return;
+    let stop = false;
+    const load = () => api<string[]>(`${base(projectId)}/online`).then(ids => { if (!stop) setOnline(ids); }).catch(() => { /* try again next time */ });
+    load();
+    const id = window.setInterval(load, 10_000);
+    return () => { stop = true; window.clearInterval(id); };
+  }, [projectId]);
+
+  const dismissRing = useCallback(() => setRing(null), []);
+
   const send = useCallback(async (body: string) => {
     if (!projectId) return;
     add(await api<ChatMessage>(`${base(projectId)}/chat`, { method: 'POST', json: { body } }));
   }, [projectId, add]);
 
-  return { messages, inCall, connected, send };
+  return { messages, inCall, connected, send, ring, dismissRing, online };
 }
