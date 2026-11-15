@@ -1,0 +1,5 @@
+a1b2c3d 2026-11-08T10:00:00Z arjun: Rename DATABASE_URL to DB_URL
+b2c3d4e 2026-11-07T10:00:00Z arjun: Replace `npm run deploy` with `npm run release`
+c3d4e5f 2026-11-06T10:00:00Z priya: Upgrade to Java 21
+d4e5f6a 2026-11-05T10:00:00Z arjun: Switch push notifications from Firebase to OneSignal
+e5f6a7b 2026-11-04T10:00:00Z priya: Remove unused imports

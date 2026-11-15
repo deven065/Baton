@@ -65,7 +65,12 @@ public class DemoSourceSeeder implements ApplicationRunner {
             new Sample(SourceType.DOCUMENT, "Payments chat", Sensitivity.INTERNAL, List.of(),
                     "2026-11-05-payments-chat.md", "2026-11-05-payments-chat.md"),
             new Sample(SourceType.DOCUMENT, "Launch and push notes", Sensitivity.INTERNAL, List.of(),
-                    "2026-11-10-launch-and-push.md", "2026-11-10-launch-and-push.md"));
+                    "2026-11-10-launch-and-push.md", "2026-11-10-launch-and-push.md"),
+            // A runbook written before four code changes, and the commit log that made parts of it out of date.
+            new Sample(SourceType.DOCUMENT, "Deploy runbook (Oct)", Sensitivity.INTERNAL, List.of(),
+                    "2026-10-01-deploy-runbook.md", "2026-10-01-deploy-runbook.md"),
+            new Sample(SourceType.DOCUMENT, "Repository history", Sensitivity.INTERNAL, List.of(),
+                    "repository-history.txt", "repository-history.txt"));
 
     private final TenantRegistry tenants;
     private final TransactionTemplate tx;
